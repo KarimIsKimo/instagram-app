@@ -140,34 +140,24 @@ async def get_ai_reply(sender_id: str, user_text: str) -> str:
     CONVERSATION_HISTORY[sender_id] = CONVERSATION_HISTORY[sender_id][-10:]
     CONVERSATION_HISTORY[sender_id].append({"role": "user", "parts": [{"text": user_text}]})
 
-    # Updated with current canonical active models
-    AVAILABLE_MODELS = [
-        "gemini-3.6-flash", 
-        "gemini-3.7-flash"
-    ]
-
-    for model_name in AVAILABLE_MODELS:
-        try:
-            response = await client.aio.models.generate_content(
-                model=model_name,
-                contents=CONVERSATION_HISTORY[sender_id],
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    temperature=0.3
-                )
+    try:
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=CONVERSATION_HISTORY[sender_id],
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                temperature=0.3
             )
-            
-            reply = response.text
-            CONVERSATION_HISTORY[sender_id].append({"role": "model", "parts": [{"text": reply}]})
-            return reply
+        )
+        
+        reply = response.text
+        CONVERSATION_HISTORY[sender_id].append({"role": "model", "parts": [{"text": reply}]})
+        return reply
 
-        except Exception as e:
-            print(f"⚠️ Model {model_name} failed: {e}")
-            continue
-            
-    # If all model limits/fallbacks are exhausted
-    CONVERSATION_HISTORY[sender_id].pop()
-    return "معلش الضغط عالي علينا شوية 😅.. ممكن تبعت رسالتك تاني؟"
+    except Exception as e:
+        print(f"⚠️ API Error: {e}")
+        CONVERSATION_HISTORY[sender_id].pop()
+        return "معلش الضغط عالي علينا شوية 😅.. ممكن تبعت رسالتك تاني؟"
 
 async def send_text_reply(recipient_id: str, text: str):
     url = "https://graph.instagram.com/v21.0/me/messages"
