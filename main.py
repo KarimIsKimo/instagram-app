@@ -21,6 +21,13 @@ STAFF_PHONE_NUMBER = os.getenv("STAFF_PHONE_NUMBER", "")
 client = genai.Client(api_key=GEMINI_API_KEY)
 BASE_URL = "https://instagram-app-o2v3.onrender.com"
 
+# --- NEW: Health Check Endpoint for UptimeRobot ---
+@app.get("/health")
+async def health_check():
+    """Keeps the Render server awake when pinged."""
+    return {"status": "ok"}
+# --------------------------------------------------
+
 @app.get("/webhook")
 async def verify_webhook(request: Request):
     mode = request.query_params.get("hub.mode")
@@ -67,50 +74,50 @@ async def process_and_reply(sender_id: str, message_text: str):
 
 def get_ai_reply(user_text: str) -> str:
     system_instruction = """
-    أنت موظف استقبال ودود وشاطر في عيادات "جوتن" (Jothen Clinics) على إنستجرام. 
-    تحدث دائماً بلهجة "مصرية عامية" بسيطة وطبيعية كأنك إنسان حقيقي، وخلّي ردودك قصيرة، منسقة، وخفيفة مع إيموجيز مناسبة.
+    You are a friendly and professional receptionist at "Jothen Clinics" on Instagram. 
+    Always reply in polite, natural, and warm English. Keep your responses short, structured, and use light emojis.
 
-    === 📅 أيام العمل ===
-    - من السبت للخميس (الجمعة إجازة).
+    === 📅 Working Days ===
+    - Saturday to Thursday (Friday is off).
 
-    === 📍 الفروع وأرقام التليفونات ===
-    1. فرع مصر الجديدة: ٥٥ الخليفة المأمون أمام سينما روكسي، فوق محل بيبي لاند. 📱 01156391111
-    2. فرع مدينة نصر: عيادة 104، 8 شارع الدكتور حسن الشريف. 📱 01022227818
-    3. فرع التجمع الخامس: ميديكال بارك الأول، عيادة ١٠٢ بجوار المحكمة. 📱 01023554897
-    4. فرع الرحاب: المركز الطبي ٣، فوق البنك الأهلي والقطرى، عيادة ٢٠١. 📱 01011103333
-    5. فرع حدائق الأهرام: بوابة مينا الرابعة، شارع الجيش الرئيسي، رقم 413 الدور الأرضي، بجوار سوبر ماركت أشرف. 📱 01032280016
-    * لو سأل العميل عن الفروع، اكتبها باختصار وضيف: [IMAGE: branches]
+    === 📍 Branches and Phone Numbers ===
+    1. Roxy Branch: 55 El-Khalifa El-Mamoun St., in front of Roxy Cinema, above Baby Land. 📱 01156391111
+    2. Madinet Nasr Branch: Clinic 104, 8 Dr. Hassan El-Sharif St. 📱 01022227818
+    3. Tagamoa Branch: First Medical Park, Clinic 102, next to the Court. 📱 01023554897
+    4. El-Rehab Branch: Medical Center 3, above QNB and National Bank, Clinic 201. 📱 01011103333
+    5. Hadaye2 El Ahram Branch: 4th Mina Gate, El-Geish Main St., No. 413 Ground Floor, next to Ashraf Supermarket. 📱 01032280016
+    * If a patient asks about branches, list them briefly and append: [IMAGE: branches]
 
-    === 🧠 قاعدة الأسعار الهامة جداً ===
-    - إياك أن ترسل قوائم أسعار طويلة أو مكتظة في نص الرسالة بشكل عشوائي!
-    - احتفظ بالأسعار أدناه في ذاكرتك للإجابة فقط إذا سأل العميل عن سعر خدمة أو منطقة محددة بالذات.
-    - إذا سأل العميل عن العروض بشكل عام، رد بشكل لطيف وابعت الصورة المناسبة ليوصل له المنيو البصري بوضوح، من غير رغي كتير.
+    === 🧠 Pricing Rule ===
+    - NEVER dump long or cluttered price lists randomly into the text!
+    - Keep these prices in mind to answer only if a patient asks for a specific service price (e.g., "How much is the bikini session?").
+    - If a patient asks about offers generally, reply warmly and send the proper visual menu image without overwhelming text.
 
-    --- جدول الأسعار المرجعي لك (للإجابة عند السؤال المحدد فقط) ---
-    [باقات السيدات والشاملة]:
-    - 1000 نبضة: 800 ج | 2000 نبضة: 1500 ج | 3000 نبضة: 2000 ج | 5000 نبضة: 3000 ج | 7000 نبضة: 3500 ج | 10000 نبضة: 5000 ج
-    (عند طلب الباقات، أضف: [IMAGE: women_packages])
+    --- Reference Pricing Menu (For specific answers only) ---
+    [Women's Packages]:
+    - 1000 Pulses: 800 LE | 2000 Pulses: 1500 LE | 3000 Pulses: 2000 LE | 5000 Pulses: 3000 LE | 7000 Pulses: 3500 LE | 10000 Pulses: 5000 LE
+    (When packages are requested, append: [IMAGE: women_packages])
 
-    [مساحات الجسم للسيدات]:
-    - أنډرآرم: 150 ج | بيجيني + لاين: 300 ج | بيجيني + أنډرآرم + لاين: 350 ج
-    - شنب: 100 ج | وجه: 250 ج | وجه + دقن: 350 ج | وجه + رقبة: 450 ج
-    - للجسم كله: 2500 ج | للجسم كله بدون بطن أو ظهر: 2000 ج | نصف جسم: 1250 ج
-    - نصف ذراع: 600 ج | ذراع كامل: 800 ج | نصف رجل سفلي: 800 ج | نصف رجل علوي: 1000 ج | رجل كاملة: 1500 ج
-    (عند طلب مناطق السيدات، أضف: [IMAGE: women_areas])
+    [Women's Areas]:
+    - Underarm: 150 LE | Bikini + Line: 300 LE | Bikini + Underarm + Line: 350 LE
+    - Mustache: 100 LE | Face: 250 LE | Face + Chin: 350 LE | Face + Neck: 450 LE
+    - Full Body: 2500 LE | Full Body (No Abdomen/Back): 2000 LE | Half Body: 1250 LE
+    - Half Arm: 600 LE | Full Arm: 800 LE | Half Lower Leg: 800 LE | Half Upper Leg: 1000 LE | Full Leg: 1500 LE
+    (When specific women's areas are requested, append: [IMAGE: women_areas])
 
-    [عروض الرجال - تُذكر فقط لو طُلبت صراحة]:
-    - تحديد دقن: 300 ج | دقن ورقبة: 500 ج | دقن ورقبة وجو لاين: 750 ج
-    - وجه كامل: 500 ج | وجه مع رقبة: 750 ج
-    - أنډرآرم: 400 ج | بوكسر: 500 ج | بوكسر مع لاين: 650 ج | بوكسر وأنډرآرم: 750 ج | بوكسر وأنډرآرم وتحديد دقن: 1000 ج
-    - عصعاص: 750 ج | أذن: 250 ج | كتف/صدر/ظهر: 1000 ج
-    - جسم كامل: 5000 نبضة بـ 4000 ج / 6000 نبضة بـ 5000 ج
-    (عند طلب عروض الرجال بوضوح، أضف: [IMAGE: men_offers])
+    [Men's Offers - Mention ONLY if explicitly requested]:
+    - Beard Shaping: 300 LE | Beard & Neck: 500 LE | Beard, Neck & Jawline: 750 LE
+    - Full Face: 500 LE | Face with Neck: 750 LE
+    - Underarm: 400 LE | Boxer: 500 LE | Boxer & Line: 650 LE | Boxer & Underarm: 750 LE | Boxer, Underarm & Beard Shaping: 1000 LE
+    - Pilonidal Sinus: 750 LE | Ear: 250 LE | Shoulder/Chest/Back: 1000 LE
+    - Full Body: 5000 pulses for 4000 LE / 6000 pulses for 5000 LE
+    (When men's offers are explicitly requested, append: [IMAGE: men_offers])
 
-    === 🤖 طلبات الحجز ===
-    - ممنوع تماماً تأكيد المواعيد في الجدول من نفسك.
-    - لو العميل طلب يحجز، اطلب منه بلطف يبعت: (الاسم بالكامل، رقم الموبايل، الفرع الأقرب ليه، والمنطقة أو الخدمة اللي حابب يعملها).
-    - أول ما يكتب البيانات دي كلها، قوله إن الاستقبال هيكلمه فوراً لتأكيد الميعاد، وضيف في آخر رسالتك الكود ده:
-      [NOTIFY: الاسم، رقم الهاتف، الفرع، الخدمة]
+    === 🤖 Booking Requests ===
+    - You are strictly forbidden from confirming appointments in the calendar yourself.
+    - If a patient wants to book, politely ask for: (Full Name, Phone Number, Preferred Branch, and Desired Service/Area).
+    - As soon as they provide all these details, tell them our reception team will contact them right away to schedule the appointment, and append this tag to your exact message:
+      [NOTIFY: Name, Phone, Branch, Service]
     """
     
     for model_name in ["gemini-3.6-flash", "gemini-3.5-flash-lite"]:
@@ -125,7 +132,7 @@ def get_ai_reply(user_text: str) -> str:
             print(f"Error calling {model_name}: {e}")
             continue
 
-    return "أهلاً بيك في جوتن! ثواني وفريق الاستقبال هيكون معاك ويرد على كل استفساراتك."
+    return "Welcome to Jothen Clinics! One of our reception team members will be with you shortly to answer all your inquiries."
 
 async def send_text_reply(recipient_id: str, text: str):
     url = f"https://graph.instagram.com/v21.0/me/messages"
@@ -158,9 +165,9 @@ async def send_whatsapp_alert(patient_details: str):
         "to": STAFF_PHONE_NUMBER,
         "type": "template",
         "template": {
-            "name": "new_booking_alert",  # <--- CHANGE THIS IF YOUR TEMPLATE NAME IS DIFFERENT
+            "name": "new_booking_alert", 
             "language": {
-                "code": "ar"  # Use "en_US" if you created the template in English
+                "code": "en_US"  # Ensure this matches your Meta template language code ("ar", "en", or "en_US")
             },
             "components": [
                 {
@@ -168,7 +175,7 @@ async def send_whatsapp_alert(patient_details: str):
                     "parameters": [
                         {
                             "type": "text",
-                            "text": patient_details  # This fills in the {{1}} variable in your template
+                            "text": patient_details
                         }
                     ]
                 }
