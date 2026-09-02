@@ -1,5 +1,6 @@
 import os
 import re
+import asyncio
 import httpx
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -104,7 +105,7 @@ async def handle_instagram_messages(request: Request, background_tasks: Backgrou
     return {"status": "success"}
 
 async def process_and_reply(sender_id: str, message_text: str):
-    reply_text = get_ai_reply(sender_id, message_text)
+    reply_text = await get_ai_reply(sender_id, message_text)
 
     # 1. Find ALL requested images in the response
     image_tags = re.findall(r'\[IMAGE:(.*?)\]', reply_text)
@@ -132,32 +133,42 @@ async def process_and_reply(sender_id: str, message_text: str):
     if patient_details:
         print(f"🚨 NEW BOOKING REQUEST: {patient_details}")
 
-def get_ai_reply(sender_id: str, user_text: str) -> str:
-    # Maintain simple stateful conversation per sender ID
+async def get_ai_reply(sender_id: str, user_text: str) -> str:
     if sender_id not in CONVERSATION_HISTORY:
         CONVERSATION_HISTORY[sender_id] = []
 
-    # Keep conversation history context reasonable (last 10 turns)
     CONVERSATION_HISTORY[sender_id] = CONVERSATION_HISTORY[sender_id][-10:]
     CONVERSATION_HISTORY[sender_id].append({"role": "user", "parts": [{"text": user_text}]})
 
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=CONVERSATION_HISTORY[sender_id],
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                temperature=0.3
-            )
-        )
-        
-        reply = response.text
-        CONVERSATION_HISTORY[sender_id].append({"role": "model", "parts": [{"text": reply}]})
-        return reply
+    # Fallback model chain to bypass rate limits smoothly on the free tier
+    AVAILABLE_MODELS = [
+        "gemini-3.6-flash", 
+        "gemini-3.6-flash-8b", 
+        "gemini-3.6-pro"
+    ]
 
-    except Exception as e:
-        print(f"Error calling Gemini: {e}")
-        return "أهلاً بيك في جوتن! ثواني وفريق الاستقبال هيكون معاك ويرد على كل استفساراتك."
+    for model_name in AVAILABLE_MODELS:
+        try:
+            response = await client.aio.models.generate_content(
+                model=model_name,
+                contents=CONVERSATION_HISTORY[sender_id],
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    temperature=0.3
+                )
+            )
+            
+            reply = response.text
+            CONVERSATION_HISTORY[sender_id].append({"role": "model", "parts": [{"text": reply}]})
+            return reply
+
+        except Exception as e:
+            print(f"⚠️ Model {model_name} failed: {e}")
+            continue
+            
+    # If all free-tier model limits are exhausted completely
+    CONVERSATION_HISTORY[sender_id].pop()
+    return "معلش الضغط عالي علينا شوية 😅.. ممكن تبعت رسالتك تاني؟"
 
 async def send_text_reply(recipient_id: str, text: str):
     url = "https://graph.instagram.com/v21.0/me/messages"
@@ -172,11 +183,8 @@ async def send_text_reply(recipient_id: str, text: str):
     
     async with httpx.AsyncClient() as http_client:
         response = await http_client.post(url, headers=headers, json=payload)
-        
-        # Log exact error payload from Meta if 400 occurs
         if response.is_error:
             print(f"❌ Meta API Error ({response.status_code}): {response.text}")
-            
         response.raise_for_status()
 
 async def send_image_reply(recipient_id: str, image_url: str):
@@ -197,8 +205,6 @@ async def send_image_reply(recipient_id: str, image_url: str):
     
     async with httpx.AsyncClient() as http_client:
         response = await http_client.post(url, headers=headers, json=payload)
-        
         if response.is_error:
             print(f"❌ Meta API Error ({response.status_code}): {response.text}")
-            
         response.raise_for_status()
