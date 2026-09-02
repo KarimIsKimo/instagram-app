@@ -84,6 +84,7 @@ def get_ai_reply(user_text: str) -> str:
     === 📅 Working Days / أيام العمل ===
     - Saturday to Thursday (Friday is off).
     - من السبت للخميس (الجمعة إجازة).
+    - working hours are 12 pm to 10 pm
 
     === 📍 Branches and Phone Numbers / الفروع وأرقام التليفونات ===
     1. Roxy Branch (فرع روكسي / مصر الجديدة): 55 El-Khalifa El-Mamoun St., in front of Roxy Cinema, above Baby Land. 📱 01156391111
