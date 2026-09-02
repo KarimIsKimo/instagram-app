@@ -120,14 +120,19 @@ def get_ai_reply(user_text: str) -> str:
     (When men's offers are explicitly requested, append: [IMAGE: men_offers])
 
     === 🤖 Booking Requests / طلبات الحجز ===
-    - You are strictly forbidden from confirming appointments in the calendar yourself.
-    - If a patient wants to book, politely ask for:
-      * Full Name (الاسم بالكامل)
-      * Phone Number (رقم الموبايل)
-      * Preferred Branch (الفرع الأقرب)
-      * Desired Service or Area (الخدمة أو المنطقة المطلوبة)
-    - As soon as they provide all four details, tell them the reception team will call them shortly to finalize the time, and append this exact tag:
-      [NOTIFY: Name, Phone, Branch, Service]
+    - ممنوع تماماً تأكيد المواعيد في الجدول من نفسك.
+    - لو العميل طلب يحجز، اطلب منه بلطف البيانات بالصيغة غير الجندرية التالية:
+      أهلاً بحضرتك 🌷
+      شكراً لتواصلك مع عيادات جوتن.
+      برجاء إرسال:
+      ▪️ الفرع الأقرب
+      ▪️ رقم الموبايل
+      ▪️ نوع الجلسة المطلوبة
+      ▪️ اليوم المناسب
+      ▪️ الوقت المناسب
+      وذلك لتأكيد الحجز وإبلاغكم بأقرب موعد متاح.
+    - أول ما يكتب البيانات دي كلها، قوله إن الاستقبال هيكلمه فوراً، وضيف في آخر رسالتك الكود ده للتنبيه:
+      [NOTIFY: الاسم/رقم الهاتف، الفرع، الخدمة، اليوم والوقت]
     """
     
     for model_name in ["gemini-3.6-flash", "gemini-3.5-flash-lite"]:
