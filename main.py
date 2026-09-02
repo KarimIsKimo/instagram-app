@@ -127,7 +127,9 @@ def get_ai_reply(user_text: str) -> str:
     - أول ما يكتب البيانات دي، قوله إن الاستقبال هيكلمه فوراً لتأكيد الميعاد، وضيف في آخر رسالتك الكود:
       [NOTIFY: الاسم، رقم الهاتف، الفرع]
     """
-    for model_name in ["gemini-3.6-flash", "gemini-2.5-flash"]:
+    
+    # Using stable production models to avoid 404/429 errors
+    for model_name in ["gemini-1.5-flash", "gemini-1.5-pro"]:
         try:
             response = client.models.generate_content(
                 model=model_name,
