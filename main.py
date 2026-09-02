@@ -7,80 +7,69 @@ from google import genai
 
 app = FastAPI()
 
-# Mount the local images directory so Meta can access the files
 os.makedirs("images", exist_ok=True)
 app.mount("/images", StaticFiles(directory="images"), name="images")
 
+# Existing Instagram & Gemini credentials
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+# New WhatsApp credentials
+WA_PHONE_NUMBER_ID = os.getenv("WA_PHONE_NUMBER_ID", "")
+WA_ACCESS_TOKEN = os.getenv("WA_ACCESS_TOKEN", "")
+STAFF_PHONE_NUMBER = os.getenv("STAFF_PHONE_NUMBER", "")
 
-# Your live Render URL
+client = genai.Client(api_key=GEMINI_API_KEY)
 BASE_URL = "https://instagram-app-o2v3.onrender.com"
 
 @app.get("/webhook")
 async def verify_webhook(request: Request):
-    """Answers Meta's verification challenge."""
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token")
     challenge = request.query_params.get("hub.challenge")
-
     if mode == "subscribe" and token == VERIFY_TOKEN:
         return Response(content=challenge, media_type="text/plain")
     raise HTTPException(status_code=403, detail="Verification failed")
 
 @app.post("/webhook")
 async def handle_instagram_messages(request: Request, background_tasks: BackgroundTasks):
-    """Receives incoming messages and delegates processing to avoid timeouts."""
     body = await request.json()
-
     if body.get("object") == "instagram":
         for entry in body.get("entry", []):
             for messaging_event in entry.get("messaging", []):
                 message_data = messaging_event.get("message")
-                
-                # Process only incoming messages from users (ignore echoes)
                 if message_data and not message_data.get("is_echo"):
                     sender_id = messaging_event.get("sender", {}).get("id")
                     message_text = message_data.get("text")
-
                     if sender_id and message_text:
                         background_tasks.add_task(process_and_reply, sender_id, message_text)
-
     return {"status": "success"}
 
 async def process_and_reply(sender_id: str, message_text: str):
     reply_text = get_ai_reply(message_text)
 
-    # 1. Find ALL requested images in the response
     image_tags = re.findall(r'\[IMAGE:(.*?)\]', reply_text)
-    
-    # 2. Check if there's a booking notification
     notify_match = re.search(r'\[NOTIFY:(.*?)\]', reply_text)
-    patient_details = None
-    if notify_match:
-        patient_details = notify_match.group(1).strip()
+    patient_details = notify_match.group(1).strip() if notify_match else None
 
-    # 3. Clean the AI's text so the user never sees any secret tags
     clean_text = re.sub(r'\[IMAGE:.*?\]', '', reply_text)
     clean_text = re.sub(r'\[NOTIFY:.*?\]', '', clean_text).strip()
 
-    # 4. Send the text message first (if there is one)
     if clean_text:
         await send_text_reply(sender_id, clean_text)
 
-    # 5. Loop through and send every image the AI requested
     for img in image_tags:
         image_url = f"{BASE_URL}/images/{img.strip()}.jpg"
         await send_image_reply(sender_id, image_url)
 
-    # 6. Trigger the staff alert if booking details exist
+    # Trigger the WhatsApp alert
     if patient_details:
         print(f"🚨 NEW BOOKING REQUEST: {patient_details}")
+        await send_whatsapp_alert(patient_details)
 
 def get_ai_reply(user_text: str) -> str:
+    # (Keep your massive system_instruction string here exactly as it was)
     system_instruction = """
     أنت موظف استقبال ودود وشاطر في عيادات "جوتن" (Jothen Clinics) على إنستجرام. 
     تحدث دائماً بلهجة "مصرية عامية" بسيطة وطبيعية كأنك إنسان حقيقي، وخلّي ردودك قصيرة، منسقة، وخفيفة مع إيموجيز مناسبة.
@@ -128,7 +117,6 @@ def get_ai_reply(user_text: str) -> str:
       [NOTIFY: الاسم، رقم الهاتف، الفرع]
     """
     
-    # Using gemini-3.6-flash and falling back to gemini-3.5-flash-lite if rate-limited
     for model_name in ["gemini-3.6-flash", "gemini-3.5-flash-lite"]:
         try:
             response = client.models.generate_content(
@@ -144,35 +132,40 @@ def get_ai_reply(user_text: str) -> str:
     return "أهلاً بيك في جوتن! ثواني وفريق الاستقبال هيكون معاك ويرد على كل استفساراتك."
 
 async def send_text_reply(recipient_id: str, text: str):
-    url = "https://graph.instagram.com/v21.0/me/messages"
-    headers = {
-        "Authorization": f"Bearer {PAGE_ACCESS_TOKEN.strip()}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "recipient": {"id": recipient_id},
-        "message": {"text": text}
-    }
+    url = f"https://graph.instagram.com/v21.0/me/messages"
+    headers = {"Authorization": f"Bearer {PAGE_ACCESS_TOKEN.strip()}", "Content-Type": "application/json"}
+    payload = {"recipient": {"id": recipient_id}, "message": {"text": text}}
     async with httpx.AsyncClient() as http_client:
-        response = await http_client.post(url, headers=headers, json=payload)
-        response.raise_for_status()
+        await http_client.post(url, headers=headers, json=payload)
 
 async def send_image_reply(recipient_id: str, image_url: str):
-    url = "https://graph.instagram.com/v21.0/me/messages"
+    url = f"https://graph.instagram.com/v21.0/me/messages"
+    headers = {"Authorization": f"Bearer {PAGE_ACCESS_TOKEN.strip()}", "Content-Type": "application/json"}
+    payload = {"recipient": {"id": recipient_id}, "message": {"attachment": {"type": "image", "payload": {"url": image_url}}}}
+    async with httpx.AsyncClient() as http_client:
+        await http_client.post(url, headers=headers, json=payload)
+
+async def send_whatsapp_alert(patient_details: str):
+    """Sends a WhatsApp message to the clinic staff with the patient's details."""
+    if not WA_PHONE_NUMBER_ID or not WA_ACCESS_TOKEN:
+        print("Missing WhatsApp credentials. Alert not sent.")
+        return
+
+    url = f"https://graph.facebook.com/v21.0/{WA_PHONE_NUMBER_ID}/messages"
     headers = {
-        "Authorization": f"Bearer {PAGE_ACCESS_TOKEN.strip()}",
+        "Authorization": f"Bearer {WA_ACCESS_TOKEN.strip()}",
         "Content-Type": "application/json"
     }
+    
+    message_body = f"🚨 *طلب حجز جديد من إنستجرام* 🚨\n\nالبيانات:\n{patient_details}"
+    
     payload = {
-        "recipient": {"id": recipient_id},
-        "message": {
-            "attachment": {
-                "type": "image",
-                "payload": {"url": image_url}
-            }
-        }
+        "messaging_product": "whatsapp",
+        "to": STAFF_PHONE_NUMBER,
+        "type": "text",
+        "text": {"body": message_body}
     }
+    
     async with httpx.AsyncClient() as http_client:
         response = await http_client.post(url, headers=headers, json=payload)
-        print("Image Send Status:", response.status_code)
-        response.raise_for_status()
+        print("WhatsApp Alert Status:", response.status_code)
