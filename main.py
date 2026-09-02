@@ -1,11 +1,9 @@
 import os
 import re
-import asyncio
 import httpx
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
 from fastapi.staticfiles import StaticFiles
 from google import genai
-from google.genai import types
 
 app = FastAPI()
 
@@ -17,61 +15,10 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
-# Initialize Google GenAI SDK
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Your live Render URL
 BASE_URL = "https://instagram-app-o2v3.onrender.com"
-
-# Simple in-memory chat history (Note: for scaling, replace with Redis or DB)
-CONVERSATION_HISTORY = {}
-
-SYSTEM_INSTRUCTION = """
-أنت موظف استقبال ودود وشاطر في عيادات "جوتن" (Jothen Clinics) على إنستجرام. 
-تحدث دائماً بلهجة "مصرية عامية" بسيطة وطبيعية كأنك إنسان حقيقي، وخلّي ردودك قصيرة، منسقة، وخفيفة مع إيموجيز مناسبة.
-
-=== 📅 أيام العمل ===
-- من السبت للخميس (الجمعة إجازة).
-
-=== 📍 الفروع وأرقام التليفونات ===
-1. فرع مصر الجديدة: ٥٥ الخليفة المأمون أمام سينما روكسي، فوق محل بيبي لاند. 📱 01156391111
-2. فرع مدينة نصر: عيادة 104، 8 شارع الدكتور حسن الشريف. 📱 01022227818
-3. فرع التجمع الخامس: ميديكال بارك الأول، عيادة ١٠٢ بجوار المحكمة. 📱 01023554897
-4. فرع الرحاب: المركز الطبي ٣، فوق البنك الأهلي والقطرى، عيادة ٢٠١. 📱 01011103333
-5. فرع حدائق الأهرام: بوابة مينا الرابعة، شارع الجيش الرئيسي، رقم 413 الدور الأرضي، بجوار سوبر ماركت أشرف. 📱 01032280016
-* لو سأل العميل عن الفروع، اكتبها باختصار وضيف: [IMAGE: branches]
-
-=== 🧠 قاعدة الأسعار الهامة جداً ===
-- إياك أن ترسل قوائم أسعار طويلة أو مكتظة في نص الرسالة بشكل عشوائي!
-- احتفظ بالأسعار أدناه في ذاكرتك للإجابة فقط إذا سأل العميل عن سعر خدمة أو منطقة محددة بالذات (مثلاً: "بكام البكيني؟" أو "بكام الجلسة؟").
-- إذا سأل العميل عن العروض بشكل عام، رد بشكل لطيف وابعت الصورة المناسبة ليوصل له المنيو البصري بوضوح، من غير رغي كتير.
-
---- جدول الأسعار المرجعي لك (للإجابة عند السؤال المحدد فقط) ---
-[باقات السيدات والشاملة]:
-- 1000 نبضة: 800 ج | 2000 نبضة: 1500 ج | 3000 نبضة: 2000 ج | 5000 نبضة: 3000 ج | 7000 نبضة: 3500 ج | 10000 نبضة: 5000 ج
-(عند طلب الباقات، أضف: [IMAGE: women_packages])
-
-[مساحات الجسم للسيدات]:
-- أنډرآرم: 150 ج | بيجيني + لاين: 300 ج | بيجيني + أنډرآرم + لاين: 350 ج
-- شنب: 100 ج | وجه: 250 ج | وجه + دقن: 350 ج | وجه + رقبة: 450 ج
-- للجسم كله: 2500 ج | للجسم كله بدون بطن أو ظهر: 2000 ج | نصف جسم: 1250 ج
-- نصف ذراع: 600 ج | ذراع كامل: 800 ج | نصف رجل سفلي: 800 ج | نصف رجل علوي: 1000 ج | رجل كاملة: 1500 ج
-(عند طلب مناطق السيدات، أضف: [IMAGE: women_areas])
-
-[عروض الرجال - تُذكر فقط لو طُلبت صراحة]:
-- تحديد دقن: 300 ج | دقن ورقبة: 500 ج | دقن ورقبة وجو لاين: 750 ج
-- وجه كامل: 500 ج | وجه مع رقبة: 750 ج
-- أنډرآرم: 400 ج | بوكسر: 500 ج | بوكسر مع لاين: 650 ج | بوكسر وأنډرآرم: 750 ج | بوكسر وأنډرآرم وتحديد دقن: 1000 ج
-- عصعاص: 750 ج | أذن: 250 ج | كتف/صدر/ظهر: 1000 ج
-- جسم كامل: 5000 نبضة بـ 4000 ج / 6000 نبضة بـ 5000 ج
-(عند طلب عروض الرجال بوضوح، أضف: [IMAGE: men_offers])
-
-=== 🤖 طلبات الحجز ===
-- ممنوع تماماً تأكيد المواعيد في الجدول من نفسك.
-- لو العميل طلب يحجز، اطلب منه بلطف: (الاسم بالكامل، رقم الموبايل، والفرع الأقرب ليه).
-- أول ما يكتب البيانات دي، قوله إن الاستقبال هيكلمه فوراً لتأكيد الميعاد، وضيف في آخر رسالتك الكود:
-  [NOTIFY: الاسم، رقم الهاتف، الفرع]
-"""
 
 @app.get("/webhook")
 async def verify_webhook(request: Request):
@@ -105,7 +52,7 @@ async def handle_instagram_messages(request: Request, background_tasks: Backgrou
     return {"status": "success"}
 
 async def process_and_reply(sender_id: str, message_text: str):
-    reply_text = await get_ai_reply(sender_id, message_text)
+    reply_text = get_ai_reply(message_text)
 
     # 1. Find ALL requested images in the response
     image_tags = re.findall(r'\[IMAGE:(.*?)\]', reply_text)
@@ -133,31 +80,68 @@ async def process_and_reply(sender_id: str, message_text: str):
     if patient_details:
         print(f"🚨 NEW BOOKING REQUEST: {patient_details}")
 
-async def get_ai_reply(sender_id: str, user_text: str) -> str:
-    if sender_id not in CONVERSATION_HISTORY:
-        CONVERSATION_HISTORY[sender_id] = []
+def get_ai_reply(user_text: str) -> str:
+    system_instruction = """
+    أنت موظف استقبال ودود وشاطر في عيادات "جوتن" (Jothen Clinics) على إنستجرام. 
+    تحدث دائماً بلهجة "مصرية عامية" بسيطة وطبيعية كأنك إنسان حقيقي، وخلّي ردودك قصيرة، منسقة، وخفيفة مع إيموجيز مناسبة.
 
-    CONVERSATION_HISTORY[sender_id] = CONVERSATION_HISTORY[sender_id][-10:]
-    CONVERSATION_HISTORY[sender_id].append({"role": "user", "parts": [{"text": user_text}]})
+    === 📅 أيام العمل ===
+    - من السبت للخميس (الجمعة إجازة).
 
-    try:
-        response = await client.aio.models.generate_content(
-            model="gemini-2.5-pro",
-            contents=CONVERSATION_HISTORY[sender_id],
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                temperature=0.3
+    === 📍 الفروع وأرقام التليفونات ===
+    1. فرع مصر الجديدة: ٥٥ الخليفة المأمون أمام سينما روكسي، فوق محل بيبي لاند. 📱 01156391111
+    2. فرع مدينة نصر: عيادة 104، 8 شارع الدكتور حسن الشريف. 📱 01022227818
+    3. فرع التجمع الخامس: ميديكال بارك الأول، عيادة ١٠٢ بجوار المحكمة. 📱 01023554897
+    4. فرع الرحاب: المركز الطبي ٣، فوق البنك الأهلي والقطرى، عيادة ٢٠١. 📱 01011103333
+    5. فرع حدائق الأهرام: بوابة مينا الرابعة، شارع الجيش الرئيسي، رقم 413 الدور الأرضي، بجوار سوبر ماركت أشرف. 📱 01032280016
+    * لو سأل العميل عن الفروع، اكتبها باختصار وضيف: [IMAGE: branches]
+
+    === 🧠 قاعدة الأسعار الهامة جداً ===
+    - إياك أن ترسل قوائم أسعار طويلة أو مكتظة في نص الرسالة بشكل عشوائي!
+    - احتفظ بالأسعار أدناه في ذاكرتك للإجابة فقط إذا سأل العميل عن سعر خدمة أو منطقة محددة بالذات (مثلاً: "بكام البكيني؟" أو "بكام الجلسة؟").
+    - إذا سأل العميل عن العروض بشكل عام، رد بشكل لطيف وابعت الصورة المناسبة ليوصل له المنيو البصري بوضوح، من غير رغي كتير.
+
+    --- جدول الأسعار المرجعي لك (للإجابة عند السؤال المحدد فقط) ---
+    [باقات السيدات والشاملة]:
+    - 1000 نبضة: 800 ج | 2000 نبضة: 1500 ج | 3000 نبضة: 2000 ج | 5000 نبضة: 3000 ج | 7000 نبضة: 3500 ج | 10000 نبضة: 5000 ج
+    (عند طلب الباقات، أضف: [IMAGE: women_packages])
+
+    [مساحات الجسم للسيدات]:
+    - أنډرآرم: 150 ج | بيجيني + لاين: 300 ج | بيجيني + أنډرآرم + لاين: 350 ج
+    - شنب: 100 ج | وجه: 250 ج | وجه + دقن: 350 ج | وجه + رقبة: 450 ج
+    - للجسم كله: 2500 ج | للجسم كله بدون بطن أو ظهر: 2000 ج | نصف جسم: 1250 ج
+    - نصف ذراع: 600 ج | ذراع كامل: 800 ج | نصف رجل سفلي: 800 ج | نصف رجل علوي: 1000 ج | رجل كاملة: 1500 ج
+    (عند طلب مناطق السيدات، أضف: [IMAGE: women_areas])
+
+    [عروض الرجال - تُذكر فقط لو طُلبت صراحة]:
+    - تحديد دقن: 300 ج | دقن ورقبة: 500 ج | دقن ورقبة وجو لاين: 750 ج
+    - وجه كامل: 500 ج | وجه مع رقبة: 750 ج
+    - أنډرآرم: 400 ج | بوكسر: 500 ج | بوكسر مع لاين: 650 ج | بوكسر وأنډرآرم: 750 ج | بوكسر وأنډرآرم وتحديد دقن: 1000 ج
+    - عصعاص: 750 ج | أذن: 250 ج | كتف/صدر/ظهر: 1000 ج
+    - جسم كامل: 5000 نبضة بـ 4000 ج / 6000 نبضة بـ 5000 ج
+    (عند طلب عروض الرجال بوضوح، أضف: [IMAGE: men_offers])
+
+    === 🤖 طلبات الحجز ===
+    - ممنوع تماماً تأكيد المواعيد في الجدول من نفسك.
+    - لو العميل طلب يحجز، اطلب منه بلطف: (الاسم بالكامل، رقم الموبايل، والفرع الأقرب ليه).
+    - أول ما يكتب البيانات دي، قوله إن الاستقبال هيكلمه فوراً لتأكيد الميعاد، وضيف في آخر رسالتك الكود:
+      [NOTIFY: الاسم، رقم الهاتف، الفرع]
+    """
+    
+    # Using gemini-3.6-flash and falling back to gemini-3.5-flash-lite if rate-limited
+    for model_name in ["gemini-3.6-flash", "gemini-3.5-flash-lite"]:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=user_text,
+                config={"system_instruction": system_instruction}
             )
-        )
-        
-        reply = response.text
-        CONVERSATION_HISTORY[sender_id].append({"role": "model", "parts": [{"text": reply}]})
-        return reply
+            return response.text
+        except Exception as e:
+            print(f"Error calling {model_name}: {e}")
+            continue
 
-    except Exception as e:
-        print(f"⚠️ API Error: {e}")
-        CONVERSATION_HISTORY[sender_id].pop()
-        return "معلش الضغط عالي علينا شوية 😅.. ممكن تبعت رسالتك تاني؟"
+    return "أهلاً بيك في جوتن! ثواني وفريق الاستقبال هيكون معاك ويرد على كل استفساراتك."
 
 async def send_text_reply(recipient_id: str, text: str):
     url = "https://graph.instagram.com/v21.0/me/messages"
@@ -169,11 +153,8 @@ async def send_text_reply(recipient_id: str, text: str):
         "recipient": {"id": recipient_id},
         "message": {"text": text}
     }
-    
     async with httpx.AsyncClient() as http_client:
         response = await http_client.post(url, headers=headers, json=payload)
-        if response.is_error:
-            print(f"❌ Meta API Error ({response.status_code}): {response.text}")
         response.raise_for_status()
 
 async def send_image_reply(recipient_id: str, image_url: str):
@@ -191,9 +172,7 @@ async def send_image_reply(recipient_id: str, image_url: str):
             }
         }
     }
-    
     async with httpx.AsyncClient() as http_client:
         response = await http_client.post(url, headers=headers, json=payload)
-        if response.is_error:
-            print(f"❌ Meta API Error ({response.status_code}): {response.text}")
+        print("Image Send Status:", response.status_code)
         response.raise_for_status()
