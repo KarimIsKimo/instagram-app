@@ -54,51 +54,54 @@ async def handle_instagram_messages(request: Request, background_tasks: Backgrou
 async def process_and_reply(sender_id: str, message_text: str):
     reply_text = get_ai_reply(message_text)
 
-    # 1. Action: Send an image if the AI appended a tag
-    image_match = re.search(r'\[IMAGE:(.*?)\]', reply_text)
-    if image_match:
-        image_name = image_match.group(1).strip()
-        reply_text = re.sub(r'\[IMAGE:.*?\]', '', reply_text).strip()
-        image_url = f"{BASE_URL}/images/{image_name}.jpg"
+    # 1. Find ALL requested images in the response
+    image_tags = re.findall(r'\[IMAGE:(.*?)\]', reply_text)
+    
+    # 2. Check if there's a booking notification
+    notify_match = re.search(r'\[NOTIFY:(.*?)\]', reply_text)
+    patient_details = None
+    if notify_match:
+        patient_details = notify_match.group(1).strip()
 
-        await send_text_reply(sender_id, reply_text)
+    # 3. Clean the AI's text so the user never sees any secret tags
+    clean_text = re.sub(r'\[IMAGE:.*?\]', '', reply_text)
+    clean_text = re.sub(r'\[NOTIFY:.*?\]', '', clean_text).strip()
+
+    # 4. Send the text message first (if there is one)
+    if clean_text:
+        await send_text_reply(sender_id, clean_text)
+
+    # 5. Loop through and send every image the AI requested
+    for img in image_tags:
+        image_url = f"{BASE_URL}/images/{img.strip()}.jpg"
         await send_image_reply(sender_id, image_url)
 
-    # 2. Action: Notify the staff if booking details were collected
-    elif "[NOTIFY:" in reply_text:
-        notify_match = re.search(r'\[NOTIFY:(.*?)\]', reply_text)
-        if notify_match:
-            patient_details = notify_match.group(1).strip()
-            reply_text = re.sub(r'\[NOTIFY:.*?\]', '', reply_text).strip()
-
-            await send_text_reply(sender_id, reply_text)
-            print(f"🚨 NEW BOOKING REQUEST: {patient_details}")
-            # The actual Email/Telegram notification logic will go here
-
-    # 3. Action: Send standard text response
-    else:
-        await send_text_reply(sender_id, reply_text)
+    # 6. Trigger the staff alert if booking details exist
+    if patient_details:
+        print(f"🚨 NEW BOOKING REQUEST: {patient_details}")
 
 def get_ai_reply(user_text: str) -> str:
     system_instruction = """
     أنت موظف استقبال ودود وشاطر في عيادتنا على إنستجرام. 
-    مهمتك ترد على استفسارات العملاء وتساعدهم وتوجههم، وضروري جداً تتكلم بلهجة "مصرية عامية" بسيطة وطبيعية كأنك إنسان حقيقي، وبلاش لغة عربية فصحى معقدة. خلي ردودك قصيرة واستخدم إيموجيز خفيفة.
+    مهمتك ترد على استفسارات العملاء وتساعدهم وتوجههم. ضروري جداً تتكلم بلهجة "مصرية عامية" بسيطة وطبيعية كأنك إنسان حقيقي، وبلاش لغة عربية فصحى معقدة. خلي ردودك قصيرة واستخدم إيموجيز خفيفة.
 
-    قاعدة هامة: ممنوع تماماً تأكد حجز أو ميعاد في الجدول من نفسك. دورك بس تاخد بياناتهم عشان الاستقبال يكلمهم.
+    قاعدة هامة: ممنوع تماماً تأكد حجز في الجدول من نفسك. دورك بس تاخد بياناتهم.
 
-    الصور المتاحة (لازم تحط الكود ده في آخر ردك لو العميل سأل عن الحاجات دي):
-    1. لو العميل سأل عن أنواع الأجهزة اللي بنستخدمها، اشرحلة ببساطة وضيف: [IMAGE: machines]
-    2. لو سيدة سألت عن باقات العروض الشاملة، ضيف: [IMAGE: women_packages]
-    3. لو سيدة سألت عن عروض مناطق معينة في الجسم، ضيف: [IMAGE: women_areas]
-    4. لو العميل سأل عن فروعنا وعناويننا، ضيف: [IMAGE: branches]
-    5. لو راجل سأل عن عروض الرجال، ضيف: [IMAGE: men_offers]
+    ملاحظة سرية لك: أنت لا تستطيع رؤية صورة العميل ولا تعرف جنسه. لذلك، إذا سأل العميل عن "العروض" بشكل عام، اسأله بلطف شديد وبشكل طبيعي: "تحب/ي أبعتلك عروض السيدات ولا عروض الرجال؟" أو اعرض عليه الاثنين معاً.
+
+    الصور المتاحة (يمكنك إضافة أكثر من كود في نفس الرسالة إذا طلب العميل أكثر من شيء):
+    1. الاستفسار عن الأجهزة المستخدمة، ضيف: [IMAGE: machines]
+    2. الاستفسار عن باقات السيدات الشاملة، ضيف: [IMAGE: women_packages]
+    3. الاستفسار عن عروض مناطق الجسم للسيدات، ضيف: [IMAGE: women_areas]
+    4. الاستفسار عن فروعنا وعناويننا، ضيف: [IMAGE: branches]
+    5. الاستفسار عن عروض الرجال، ضيف: [IMAGE: men_offers]
 
     طلبات الحجز:
-    لو العميل طلب يحجز أو سأل عن الحجز، اطلب منه بلطف يبعتلك:
+    لو العميل طلب يحجز، اطلب منه بلطف يبعتلك:
     - الاسم بالكامل
     - رقم الموبايل
     - الفرع الأقرب ليه
-    وبمجرد ما يكتب البيانات دي كلها، قوله إن فريق الاستقبال هيكلمه فوراً عشان يحدد معاه الميعاد المناسب، وبعدين ضيف الكود ده في آخر رسالتك بالظبط عشان السيستم يبلغنا:
+    وبمجرد ما يكتب البيانات دي كلها، قوله إن فريق الاستقبال هيكلمه فوراً عشان يحدد معاه الميعاد، وبعدين ضيف الكود ده في آخر رسالتك عشان السيستم يبلغنا:
     [NOTIFY: الاسم، رقم الهاتف، الفرع]
     """
     for model_name in ["gemini-3.6-flash", "gemini-2.5-flash"]:
