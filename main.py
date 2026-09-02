@@ -142,7 +142,7 @@ async def get_ai_reply(sender_id: str, user_text: str) -> str:
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-pro",
             contents=CONVERSATION_HISTORY[sender_id],
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
