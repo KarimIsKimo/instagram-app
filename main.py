@@ -65,10 +65,10 @@ def get_ai_reply(user_text: str) -> str:
         return "Hello! Thanks for reaching out. A member of our team will get back to you shortly."
 
 async def send_reply(recipient_id: str, text: str):
-    """Sends the message back to the user via Meta Graph API."""
-    url = "https://graph.facebook.com/v21.0/me/messages"
+    """Sends the message back to the user via Instagram Graph API."""
+    url = "https://graph.instagram.com/v21.0/me/messages"
     headers = {
-        "Authorization": f"Bearer {PAGE_ACCESS_TOKEN}",
+        "Authorization": f"Bearer {PAGE_ACCESS_TOKEN.strip()}",
         "Content-Type": "application/json"
     }
     payload = {
@@ -78,5 +78,6 @@ async def send_reply(recipient_id: str, text: str):
     
     async with httpx.AsyncClient() as http_client:
         response = await http_client.post(url, headers=headers, json=payload)
-        print("Meta send response:", response.status_code, response.text)
+        print("Instagram send status:", response.status_code)
+        print("Instagram send details:", response.text)
         response.raise_for_status()
