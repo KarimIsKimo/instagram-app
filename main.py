@@ -140,10 +140,10 @@ async def get_ai_reply(sender_id: str, user_text: str) -> str:
     CONVERSATION_HISTORY[sender_id] = CONVERSATION_HISTORY[sender_id][-10:]
     CONVERSATION_HISTORY[sender_id].append({"role": "user", "parts": [{"text": user_text}]})
 
-    # Using verified standard models to prevent 404 errors
+    # Updated with current canonical active models
     AVAILABLE_MODELS = [
-        "gemini-2.0-flash", 
-        "gemini-1.5-flash"
+        "gemini-3.6-flash", 
+        "gemini-3.7-flash"
     ]
 
     for model_name in AVAILABLE_MODELS:
