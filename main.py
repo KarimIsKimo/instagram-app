@@ -10,12 +10,10 @@ app = FastAPI()
 os.makedirs("images", exist_ok=True)
 app.mount("/images", StaticFiles(directory="images"), name="images")
 
-# Existing Instagram & Gemini credentials
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
-# New WhatsApp credentials
 WA_PHONE_NUMBER_ID = os.getenv("WA_PHONE_NUMBER_ID", "")
 WA_ACCESS_TOKEN = os.getenv("WA_ACCESS_TOKEN", "")
 STAFF_PHONE_NUMBER = os.getenv("STAFF_PHONE_NUMBER", "")
@@ -63,13 +61,11 @@ async def process_and_reply(sender_id: str, message_text: str):
         image_url = f"{BASE_URL}/images/{img.strip()}.jpg"
         await send_image_reply(sender_id, image_url)
 
-    # Trigger the WhatsApp alert
     if patient_details:
         print(f"🚨 NEW BOOKING REQUEST: {patient_details}")
         await send_whatsapp_alert(patient_details)
 
 def get_ai_reply(user_text: str) -> str:
-    # (Keep your massive system_instruction string here exactly as it was)
     system_instruction = """
     أنت موظف استقبال ودود وشاطر في عيادات "جوتن" (Jothen Clinics) على إنستجرام. 
     تحدث دائماً بلهجة "مصرية عامية" بسيطة وطبيعية كأنك إنسان حقيقي، وخلّي ردودك قصيرة، منسقة، وخفيفة مع إيموجيز مناسبة.
@@ -87,7 +83,7 @@ def get_ai_reply(user_text: str) -> str:
 
     === 🧠 قاعدة الأسعار الهامة جداً ===
     - إياك أن ترسل قوائم أسعار طويلة أو مكتظة في نص الرسالة بشكل عشوائي!
-    - احتفظ بالأسعار أدناه في ذاكرتك للإجابة فقط إذا سأل العميل عن سعر خدمة أو منطقة محددة بالذات (مثلاً: "بكام البكيني؟" أو "بكام الجلسة؟").
+    - احتفظ بالأسعار أدناه في ذاكرتك للإجابة فقط إذا سأل العميل عن سعر خدمة أو منطقة محددة بالذات.
     - إذا سأل العميل عن العروض بشكل عام، رد بشكل لطيف وابعت الصورة المناسبة ليوصل له المنيو البصري بوضوح، من غير رغي كتير.
 
     --- جدول الأسعار المرجعي لك (للإجابة عند السؤال المحدد فقط) ---
@@ -112,9 +108,9 @@ def get_ai_reply(user_text: str) -> str:
 
     === 🤖 طلبات الحجز ===
     - ممنوع تماماً تأكيد المواعيد في الجدول من نفسك.
-    - لو العميل طلب يحجز، اطلب منه بلطف: (الاسم بالكامل، رقم الموبايل، والفرع الأقرب ليه).
-    - أول ما يكتب البيانات دي، قوله إن الاستقبال هيكلمه فوراً لتأكيد الميعاد، وضيف في آخر رسالتك الكود:
-      [NOTIFY: الاسم، رقم الهاتف، الفرع]
+    - لو العميل طلب يحجز، اطلب منه بلطف يبعت: (الاسم بالكامل، رقم الموبايل، الفرع الأقرب ليه، والمنطقة أو الخدمة اللي حابب يعملها).
+    - أول ما يكتب البيانات دي كلها، قوله إن الاستقبال هيكلمه فوراً لتأكيد الميعاد، وضيف في آخر رسالتك الكود ده:
+      [NOTIFY: الاسم، رقم الهاتف، الفرع، الخدمة]
     """
     
     for model_name in ["gemini-3.6-flash", "gemini-3.5-flash-lite"]:
@@ -146,7 +142,7 @@ async def send_image_reply(recipient_id: str, image_url: str):
         await http_client.post(url, headers=headers, json=payload)
 
 async def send_whatsapp_alert(patient_details: str):
-    """Sends a WhatsApp message to the clinic staff with the patient's details."""
+    """Sends a WhatsApp Template message to bypass the 24-hour rule."""
     if not WA_PHONE_NUMBER_ID or not WA_ACCESS_TOKEN:
         print("Missing WhatsApp credentials. Alert not sent.")
         return
@@ -157,15 +153,31 @@ async def send_whatsapp_alert(patient_details: str):
         "Content-Type": "application/json"
     }
     
-    message_body = f"🚨 *طلب حجز جديد من إنستجرام* 🚨\n\nالبيانات:\n{patient_details}"
-    
     payload = {
         "messaging_product": "whatsapp",
         "to": STAFF_PHONE_NUMBER,
-        "type": "text",
-        "text": {"body": message_body}
+        "type": "template",
+        "template": {
+            "name": "new_booking_alert",  # <--- CHANGE THIS IF YOUR TEMPLATE NAME IS DIFFERENT
+            "language": {
+                "code": "ar"  # Use "en_US" if you created the template in English
+            },
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {
+                            "type": "text",
+                            "text": patient_details  # This fills in the {{1}} variable in your template
+                        }
+                    ]
+                }
+            ]
+        }
     }
     
     async with httpx.AsyncClient() as http_client:
         response = await http_client.post(url, headers=headers, json=payload)
         print("WhatsApp Alert Status:", response.status_code)
+        if response.status_code != 200:
+            print("WhatsApp Error:", response.text)
