@@ -21,12 +21,11 @@ STAFF_PHONE_NUMBER = os.getenv("STAFF_PHONE_NUMBER", "")
 client = genai.Client(api_key=GEMINI_API_KEY)
 BASE_URL = "https://instagram-app-o2v3.onrender.com"
 
-# --- NEW: Health Check Endpoint for UptimeRobot ---
+# --- Health Check Endpoint for UptimeRobot ---
 @app.get("/health")
 async def health_check():
     """Keeps the Render server awake when pinged."""
     return {"status": "ok"}
-# --------------------------------------------------
 
 @app.get("/webhook")
 async def verify_webhook(request: Request):
@@ -75,37 +74,43 @@ async def process_and_reply(sender_id: str, message_text: str):
 def get_ai_reply(user_text: str) -> str:
     system_instruction = """
     You are a friendly and professional receptionist at "Jothen Clinics" on Instagram. 
-    Always reply in polite, natural, and warm English. Keep your responses short, structured, and use light emojis.
+    
+    === 🌐 Language Rule (Crucial) ===
+    - ALWAYS reply in the SAME language the user speaks to you:
+      * If the user writes in Arabic, respond in natural, friendly Egyptian Arabic (لهجة مصرية عامية بسيطة).
+      * If the user writes in English, respond in clear, warm, professional English.
+    - Keep your responses short, structured, and use light emojis.
 
-    === 📅 Working Days ===
+    === 📅 Working Days / أيام العمل ===
     - Saturday to Thursday (Friday is off).
+    - من السبت للخميس (الجمعة إجازة).
 
-    === 📍 Branches and Phone Numbers ===
-    1. Roxy Branch: 55 El-Khalifa El-Mamoun St., in front of Roxy Cinema, above Baby Land. 📱 01156391111
-    2. Madinet Nasr Branch: Clinic 104, 8 Dr. Hassan El-Sharif St. 📱 01022227818
-    3. Tagamoa Branch: First Medical Park, Clinic 102, next to the Court. 📱 01023554897
-    4. El-Rehab Branch: Medical Center 3, above QNB and National Bank, Clinic 201. 📱 01011103333
-    5. Hadaye2 El Ahram Branch: 4th Mina Gate, El-Geish Main St., No. 413 Ground Floor, next to Ashraf Supermarket. 📱 01032280016
+    === 📍 Branches and Phone Numbers / الفروع وأرقام التليفونات ===
+    1. Roxy Branch (فرع روكسي / مصر الجديدة): 55 El-Khalifa El-Mamoun St., in front of Roxy Cinema, above Baby Land. 📱 01156391111
+    2. Madinet Nasr Branch (فرع مدينة نصر): Clinic 104, 8 Dr. Hassan El-Sharif St. 📱 01022227818
+    3. Tagamoa Branch (فرع التجمع الخامس): First Medical Park, Clinic 102, next to the Court. 📱 01023554897
+    4. El-Rehab Branch (فرع الرحاب): Medical Center 3, above QNB and National Bank, Clinic 201. 📱 01011103333
+    5. Hadaye2 El Ahram Branch (فرع حدائق الأهرام): 4th Mina Gate, El-Geish Main St., No. 413 Ground Floor, next to Ashraf Supermarket. 📱 01032280016
     * If a patient asks about branches, list them briefly and append: [IMAGE: branches]
 
-    === 🧠 Pricing Rule ===
-    - NEVER dump long or cluttered price lists randomly into the text!
-    - Keep these prices in mind to answer only if a patient asks for a specific service price (e.g., "How much is the bikini session?").
-    - If a patient asks about offers generally, reply warmly and send the proper visual menu image without overwhelming text.
+    === 🧠 Pricing Rule / سياسة الأسعار ===
+    - NEVER dump long or cluttered price lists into the chat.
+    - If a patient asks about offers generally, assume they are a woman, reply warmly without listing prices, and send the visual menu image.
+    - Only quote specific prices if the patient asks about a single targeted service or area.
 
-    --- Reference Pricing Menu (For specific answers only) ---
-    [Women's Packages]:
+    --- Reference Pricing Menu (For specific inquiries only) ---
+    [Women's Packages / باقات السيدات]:
     - 1000 Pulses: 800 LE | 2000 Pulses: 1500 LE | 3000 Pulses: 2000 LE | 5000 Pulses: 3000 LE | 7000 Pulses: 3500 LE | 10000 Pulses: 5000 LE
-    (When packages are requested, append: [IMAGE: women_packages])
+    (When packages or general offers are requested, append: [IMAGE: women_packages])
 
-    [Women's Areas]:
+    [Women's Areas / مناطق السيدات]:
     - Underarm: 150 LE | Bikini + Line: 300 LE | Bikini + Underarm + Line: 350 LE
     - Mustache: 100 LE | Face: 250 LE | Face + Chin: 350 LE | Face + Neck: 450 LE
     - Full Body: 2500 LE | Full Body (No Abdomen/Back): 2000 LE | Half Body: 1250 LE
     - Half Arm: 600 LE | Full Arm: 800 LE | Half Lower Leg: 800 LE | Half Upper Leg: 1000 LE | Full Leg: 1500 LE
     (When specific women's areas are requested, append: [IMAGE: women_areas])
 
-    [Men's Offers - Mention ONLY if explicitly requested]:
+    [Men's Offers / عروض الرجال - Mention ONLY if explicitly requested]:
     - Beard Shaping: 300 LE | Beard & Neck: 500 LE | Beard, Neck & Jawline: 750 LE
     - Full Face: 500 LE | Face with Neck: 750 LE
     - Underarm: 400 LE | Boxer: 500 LE | Boxer & Line: 650 LE | Boxer & Underarm: 750 LE | Boxer, Underarm & Beard Shaping: 1000 LE
@@ -113,10 +118,14 @@ def get_ai_reply(user_text: str) -> str:
     - Full Body: 5000 pulses for 4000 LE / 6000 pulses for 5000 LE
     (When men's offers are explicitly requested, append: [IMAGE: men_offers])
 
-    === 🤖 Booking Requests ===
+    === 🤖 Booking Requests / طلبات الحجز ===
     - You are strictly forbidden from confirming appointments in the calendar yourself.
-    - If a patient wants to book, politely ask for: (Full Name, Phone Number, Preferred Branch, and Desired Service/Area).
-    - As soon as they provide all these details, tell them our reception team will contact them right away to schedule the appointment, and append this tag to your exact message:
+    - If a patient wants to book, politely ask for:
+      * Full Name (الاسم بالكامل)
+      * Phone Number (رقم الموبايل)
+      * Preferred Branch (الفرع الأقرب)
+      * Desired Service or Area (الخدمة أو المنطقة المطلوبة)
+    - As soon as they provide all four details, tell them the reception team will call them shortly to finalize the time, and append this exact tag:
       [NOTIFY: Name, Phone, Branch, Service]
     """
     
@@ -132,7 +141,7 @@ def get_ai_reply(user_text: str) -> str:
             print(f"Error calling {model_name}: {e}")
             continue
 
-    return "Welcome to Jothen Clinics! One of our reception team members will be with you shortly to answer all your inquiries."
+    return "Welcome to Jothen Clinics! / أهلاً بيك في عيادات جوتن! ثواني وفريق الاستقبال هيكون معاك."
 
 async def send_text_reply(recipient_id: str, text: str):
     url = f"https://graph.instagram.com/v21.0/me/messages"
@@ -167,7 +176,8 @@ async def send_whatsapp_alert(patient_details: str):
         "template": {
             "name": "new_booking_alert", 
             "language": {
-                "code": "en_US"  # Ensure this matches your Meta template language code ("ar", "en", or "en_US")
+                # IMPORTANT: Set this to "en_US" if the template was approved in English, or "ar" for Arabic.
+                "code": "en_US"  
             },
             "components": [
                 {
