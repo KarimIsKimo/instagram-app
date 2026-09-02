@@ -160,32 +160,45 @@ def get_ai_reply(sender_id: str, user_text: str) -> str:
         return "أهلاً بيك في جوتن! ثواني وفريق الاستقبال هيكون معاك ويرد على كل استفساراتك."
 
 async def send_text_reply(recipient_id: str, text: str):
-    # Meta Graph API endpoint for Messaging
-    url = "https://graph.facebook.com/v21.0/me/messages"
-    headers = {"Content-Type": "application/json"}
-    params = {"access_token": PAGE_ACCESS_TOKEN.strip()}
+    url = "https://graph.instagram.com/v21.0/me/messages"
+    headers = {
+        "Authorization": f"Bearer {PAGE_ACCESS_TOKEN.strip()}",
+        "Content-Type": "application/json"
+    }
     payload = {
         "recipient": {"id": recipient_id},
         "message": {"text": text}
     }
+    
     async with httpx.AsyncClient() as http_client:
-        response = await http_client.post(url, headers=headers, params=params, json=payload)
+        response = await http_client.post(url, headers=headers, json=payload)
+        
+        # Log exact error payload from Meta if 400 occurs
+        if response.is_error:
+            print(f"❌ Meta API Error ({response.status_code}): {response.text}")
+            
         response.raise_for_status()
 
 async def send_image_reply(recipient_id: str, image_url: str):
-    url = "https://graph.facebook.com/v21.0/me/messages"
-    headers = {"Content-Type": "application/json"}
-    params = {"access_token": PAGE_ACCESS_TOKEN.strip()}
+    url = "https://graph.instagram.com/v21.0/me/messages"
+    headers = {
+        "Authorization": f"Bearer {PAGE_ACCESS_TOKEN.strip()}",
+        "Content-Type": "application/json"
+    }
     payload = {
         "recipient": {"id": recipient_id},
         "message": {
             "attachment": {
                 "type": "image",
-                "payload": {"url": image_url, "is_reusable": True}
+                "payload": {"url": image_url}
             }
         }
     }
+    
     async with httpx.AsyncClient() as http_client:
-        response = await http_client.post(url, headers=headers, params=params, json=payload)
-        print("Image Send Status:", response.status_code)
+        response = await http_client.post(url, headers=headers, json=payload)
+        
+        if response.is_error:
+            print(f"❌ Meta API Error ({response.status_code}): {response.text}")
+            
         response.raise_for_status()
