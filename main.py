@@ -140,11 +140,10 @@ async def get_ai_reply(sender_id: str, user_text: str) -> str:
     CONVERSATION_HISTORY[sender_id] = CONVERSATION_HISTORY[sender_id][-10:]
     CONVERSATION_HISTORY[sender_id].append({"role": "user", "parts": [{"text": user_text}]})
 
-    # Fallback model chain to bypass rate limits smoothly on the free tier
+    # Using verified standard models to prevent 404 errors
     AVAILABLE_MODELS = [
-        "gemini-3.6-flash", 
-        "gemini-3.6-flash-8b", 
-        "gemini-3.6-pro"
+        "gemini-2.0-flash", 
+        "gemini-1.5-flash"
     ]
 
     for model_name in AVAILABLE_MODELS:
@@ -166,7 +165,7 @@ async def get_ai_reply(sender_id: str, user_text: str) -> str:
             print(f"⚠️ Model {model_name} failed: {e}")
             continue
             
-    # If all free-tier model limits are exhausted completely
+    # If all model limits/fallbacks are exhausted
     CONVERSATION_HISTORY[sender_id].pop()
     return "معلش الضغط عالي علينا شوية 😅.. ممكن تبعت رسالتك تاني؟"
 
