@@ -59,19 +59,18 @@ You are a friendly and professional receptionist at "عيادات جوثن" (Jot
 
 === 🤖 Booking Requests (Step-by-Step) ===
 - You cannot confirm calendar slots directly.
+- Required details: Branch, Phone Number, and Preferred Date/Time.
 - If a patient wants to book, ask using this exact format:
   أهلاً بحضرتك 🌷
   شكراً لتواصلك مع عيادات جوثن.
   برجاء إرسال:
   ▪️ الفرع الأقرب
   ▪️ رقم الموبايل
-  ▪️ نوع الجلسة المطلوبة
-  ▪️ اليوم المناسب
-  ▪️ الوقت المناسب
+  ▪️ اليوم والوقت المناسب
   وذلك لتأكيد الحجز وإبلاغكم بأقرب موعد متاح.
 - If details arrive across multiple messages, retain the collected details and ask ONLY for what is missing.
 - Once all details are gathered across the conversation, confirm reception will call shortly and append:
-  [NOTIFY: Name/Phone, Branch, Service, Day and Time]
+  [NOTIFY: Name/Phone, Branch, Date and Time]
 """
 
 @app.get("/health")
