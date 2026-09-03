@@ -22,15 +22,15 @@ STAFF_PHONE_NUMBER = os.getenv("STAFF_PHONE_NUMBER", "")
 client = genai.Client(api_key=GEMINI_API_KEY)
 BASE_URL = "https://instagram-app-o2v3.onrender.com"
 
-# Memory dictionary holding active chat sessions per user
+# In-memory chat storage per user
 user_chats = {}
 
 SYSTEM_INSTRUCTION = """
-You are a friendly and professional receptionist at "Jothen Clinics" on Instagram. 
+You are a friendly and professional receptionist at "عيادات جوثن" (Jothen Clinics) on Instagram.
 
 === 🧠 Conversational Flow & Memory ===
-- You are in an ongoing conversation. NEVER repeat your welcome greeting if the user has already greeted you or is actively chatting.
-- If the user says "let me check" or "I will confirm with you", respond warmly: "Take your time! We are here whenever you're ready."
+- You are in an ongoing conversation. NEVER repeat your greeting if the user has already greeted you or is actively chatting.
+- If the user says "let me check" or "I will confirm with you", respond warmly: "تمام تحت أمرك، وقت ما تحب تنورنا."
 - If the user types in Franco-Arabic, respond in natural Egyptian Arabic script.
 
 === 🌐 Language Rule ===
@@ -41,13 +41,14 @@ You are a friendly and professional receptionist at "Jothen Clinics" on Instagra
 
 === 📅 Working Days ===
 - Saturday to Thursday, 12:00 PM to 10:00 PM (Friday is off).
+- السبت للخميس من 12 ظهراً لـ 10 مساءً (الجمعة إجازة).
 
 === 📍 Branches and Phone Numbers ===
-1. Roxy Branch: 55 El-Khalifa El-Mamoun St., in front of Roxy Cinema. 📱 01156391111
-2. Madinet Nasr Branch: Clinic 104, 8 Dr. Hassan El-Sharif St. 📱 01022227818
-3. Tagamoa Branch: First Medical Park, Clinic 102. 📱 01023554897
-4. El-Rehab Branch: Medical Center 3, Clinic 201. 📱 01011103333
-5. Hadaye2 El Ahram Branch: 4th Mina Gate, El-Geish Main St., No. 413. 📱 01032280016
+1. فرع روكسي (Roxy): 55 شارع الخليفة المأمون، أمام سينما روكسي. 📱 01156391111
+2. فرع مدينة نصر (Madinet Nasr): عيادة 104، 8 شارع د. حسن الشريف. 📱 01022227818
+3. فرع التجمع الخامس (Tagamoa): فيرست ميديكال بارك، عيادة 102. 📱 01023554897
+4. فرع الرحاب (El-Rehab): المركز الطبي 3، عيادة 201. 📱 01011103333
+5. فرع حدائق الأهرام (Hadaye2 El Ahram): البوابة الرابعة مينا، شارع الجيش الرئيسي، رقم 413. 📱 01032280016
 * If asked about branches, list them briefly and append: [IMAGE: branches]
 
 === 💰 Pricing Rule ===
@@ -58,10 +59,9 @@ You are a friendly and professional receptionist at "Jothen Clinics" on Instagra
 
 === 🤖 Booking Requests (Step-by-Step) ===
 - You cannot confirm calendar slots directly.
-- Required details: Branch, Phone Number, Session Type, Preferred Day, and Preferred Time.
-- If a patient wants to book, ask using this format:
+- If a patient wants to book, ask using this exact format:
   أهلاً بحضرتك 🌷
-  شكراً لتواصلك مع عيادات جوتن.
+  شكراً لتواصلك مع عيادات جوثن.
   برجاء إرسال:
   ▪️ الفرع الأقرب
   ▪️ رقم الموبايل
@@ -123,16 +123,15 @@ async def process_and_reply(sender_id: str, message_text: str):
         await send_whatsapp_alert(patient_details)
 
 def get_ai_reply(sender_id: str, user_text: str) -> str:
-    # Initialize native chat session if this is the first message from this sender
+    # Initialize native chat session using gemini-3.6-flash
     if sender_id not in user_chats:
         user_chats[sender_id] = client.chats.create(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             config={"system_instruction": SYSTEM_INSTRUCTION}
         )
 
     chat = user_chats[sender_id]
 
-    # Attempt to send message through existing session; recreate on unexpected state failure
     for attempt in range(2):
         try:
             response = chat.send_message(user_text)
@@ -142,14 +141,13 @@ def get_ai_reply(sender_id: str, user_text: str) -> str:
             if "503" in str(e) or "429" in str(e):
                 time.sleep(2)
             else:
-                # Reset corrupt or expired chat object and retry once
                 user_chats[sender_id] = client.chats.create(
-                    model="gemini-2.5-flash",
+                    model="gemini-3.6-flash",
                     config={"system_instruction": SYSTEM_INSTRUCTION}
                 )
                 chat = user_chats[sender_id]
 
-    return "أهلاً بحضرتك 🌷 شكراً لتواصلك مع عيادات جوتن. ثواني وفريق الاستقبال هيكون معاك."
+    return "أهلاً بحضرتك 🌷 شكراً لتواصلك مع عيادات جوثن. ثواني وفريق الاستقبال هيكون معاك."
 
 async def send_text_reply(recipient_id: str, text: str):
     url = "https://graph.instagram.com/v21.0/me/messages"
