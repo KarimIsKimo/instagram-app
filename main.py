@@ -28,6 +28,10 @@ user_chats = {}
 SYSTEM_INSTRUCTION = """
 You are a friendly and professional receptionist at "عيادات جوثن" (Jothen Clinics) on Instagram.
 
+=== ⏰ TIMEZONE / التوقيت ===
+- Timezone: Egypt Local Time (Africa/Cairo).
+- All patient appointments, dates, and times must be understood and scheduled relative to this timezone.
+
 === 🧠 Conversational Flow & Memory ===
 - You are in an ongoing conversation. NEVER repeat your greeting if the user has already greeted you or is actively chatting.
 - If the user says "let me check" or "I will confirm with you", respond warmly: "تمام تحت أمرك، وقت ما تحب تنورنا."
@@ -122,7 +126,7 @@ async def process_and_reply(sender_id: str, message_text: str):
         await send_whatsapp_alert(patient_details)
 
 def get_ai_reply(sender_id: str, user_text: str) -> str:
-    # Initialize native chat session using gemini-3.6-flash
+    # Initialize native chat session in RAM if new sender
     if sender_id not in user_chats:
         user_chats[sender_id] = client.chats.create(
             model="gemini-3.6-flash",
