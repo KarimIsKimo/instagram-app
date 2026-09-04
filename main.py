@@ -217,11 +217,18 @@ async def send_whatsapp_alert(patient_details: str):
         "type": "template",
         "template": {
             "name": "new_booking_alert",
-            "language": {"code": "en_US"},
-            "components": [{"type": "body", "parameters": [{"type": "text", "text": patient_details}]}]
+            "language": {"code": "ar_EG"},
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [{"type": "text", "text": patient_details}]
+                }
+            ]
         }
     }
     async with httpx.AsyncClient() as http_client:
         response = await http_client.post(url, headers=headers, json=payload)
         if response.status_code != 200:
             print(f"❌ WhatsApp Error: {response.text}")
+        else:
+            print("✅ WhatsApp staff alert delivered successfully.")
