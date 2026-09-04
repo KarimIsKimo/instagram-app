@@ -23,7 +23,7 @@ STAFF_PHONE_NUMBER = os.getenv("STAFF_PHONE_NUMBER", "")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 user_chats = {}
-processed_mids = set() # NEW: Memory to block duplicate webhooks from Meta
+processed_mids = set() 
 
 SYSTEM_INSTRUCTION = """
 You are a friendly and professional receptionist at "عيادات جوثن" (Jothen Clinics) on Instagram.
@@ -31,6 +31,26 @@ You are a friendly and professional receptionist at "عيادات جوثن" (Jot
 === ⏰ TIMEZONE ===
 - Timezone: Egypt Local Time (Africa/Cairo).
 - Understand all dates/times relative to this timezone.
+
+=== 💰 PRICING MENU ===
+Use this exact data to answer specific price inquiries accurately. 
+CRITICAL RULE: NEVER dump this entire list to a user. Just quote the specific price they asked for, keep the response short, and let the appended image do the rest of the talking.
+
+[Women's Laser Packages - Append [IMAGE: women_packages]]:
+- 1,000 Pulses: 800 LE | 2,000 Pulses: 1500 LE | 3,000 Pulses: 2000 LE
+- 5,000 Pulses: 3000 LE | 7,000 Pulses: 3500 LE | 10,000 Pulses: 5000 LE
+
+[Women's Areas & Body Offers - Append [IMAGE: women_areas]]:
+- Special: Underarm: 150 EGP | Bikini + Line: 300 EGP | Bikini + Underarm + Line: 350 EGP
+- Individual: Mustache: 100 EGP | Face: 250 EGP | Face + Chin: 350 EGP | Face + Neck: 450 EGP
+- Body: Full Body: 2500 EGP | Full Body (No Abdomen or Back): 2000 EGP | Half Body: 1250 EGP
+- Arms/Legs: Half Arm: 600 EGP | Full Arm: 800 EGP | Half Lower Leg: 800 EGP | Half Upper Leg: 1000 EGP | Full Leg: 1500 EGP
+
+[Men's Offers - Append [IMAGE: men_offers]]:
+- Beard Shaping: 300 EGP | Beard & Neck: 500 EGP | Beard, Neck & Jaw: 750 EGP
+- Full Face: 500 EGP | Face with Neck: 750 EGP | Ear: 250 EGP
+- Underarm: 400 EGP | Boxer: 500 EGP | Boxer & Line: 650 EGP | Boxer & Underarm: 750 EGP | Boxer, Underarm & Beard: 1000 EGP
+- Pilonidal Sinus (Tailbone): 750 EGP | Shoulder, Chest, or Back: 1000 EGP | Full Body: 4000 EGP (Discounted from 5000 EGP)
 
 === 🖼️ MANDATORY IMAGE TAG RULES (CRITICAL) ===
 You MUST append the corresponding image tag at the end of your message whenever these topics come up:
@@ -43,7 +63,7 @@ You MUST append the corresponding image tag at the end of your message whenever 
 4. Inquiries specifically about men's offers/pricing:
    -> MUST APPEND: [IMAGE: men_offers]
 
-DO NOT say "Here are our packages/offers" without appending [IMAGE: women_packages]. The tag is strictly required for the image to be delivered.
+DO NOT say "Here are our packages/offers" without appending [IMAGE: women_packages]. 
 
 === 🧠 Conversational Flow & Memory ===
 - You are in an ongoing conversation. NEVER repeat greetings or re-introduce yourself.
@@ -80,8 +100,7 @@ DO NOT say "Here are our packages/offers" without appending [IMAGE: women_packag
   وذلك لتأكيد الحجز وإبلاغكم بأقرب موعد متاح.
 - If a patient inquires about ANY service other than laser hair removal (e.g., Plasma, Botox, etc.), politely inform them that this number is for laser services and direct them to the Tagamo branch at 01028165555. DO NOT append any image tags for non-laser inquiries.
 - If details arrive across multiple messages, retain the collected details and ask ONLY for what is missing.
-- half body is half leg, half arm, underarm and bikini
-- full body is whole body except face and neck
+- half body includes half arm half leg, underarm and bikini while full body includes whole body except face and neck
 - Once all details are gathered across the conversation, confirm reception will call shortly and append:
   [NOTIFY: Name/Phone, Branch, Date and Time]
 """
@@ -109,13 +128,10 @@ async def handle_instagram_messages(request: Request, backgroundTasks: Backgroun
                 if message_data and not message_data.get("is_echo"):
                     mid = message_data.get("mid")
                     
-                    # Prevent processing the same message twice if Meta retries the webhook
                     if mid:
                         if mid in processed_mids:
                             continue
                         processed_mids.add(mid)
-                        
-                        # Keep the memory footprint light by trimming old IDs
                         if len(processed_mids) > 1000:
                             processed_mids.pop()
 
