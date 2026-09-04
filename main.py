@@ -23,6 +23,7 @@ STAFF_PHONE_NUMBER = os.getenv("STAFF_PHONE_NUMBER", "")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 user_chats = {}
+processed_mids = set() # NEW: Memory to block duplicate webhooks from Meta
 
 SYSTEM_INSTRUCTION = """
 You are a friendly and professional receptionist at "عيادات جوثن" (Jothen Clinics) on Instagram.
@@ -66,10 +67,10 @@ DO NOT say "Here are our packages/offers" without appending [IMAGE: women_packag
 4. فرع الرحاب (El-Rehab): المركز الطبي 3، عيادة 201. 📱 01011103333
 5. فرع حدائق الأهرام (Hadaye2 El Ahram): البوابة الرابعة مينا، شارع الجيش الرئيسي، رقم 413. 📱 01032280016
 
-=== 🤖 Booking Requests (Step-by-Step) ===
+=== 🤖 Booking Requests & Services ===
 - You cannot confirm calendar slots directly.
 - Required details: Branch, Phone Number, and Preferred Date/Time.
-- If a patient wants to book, ask using this format:
+- If a patient wants to book laser hair removal, ask using this format:
   أهلاً بحضرتك 🌷
   شكراً لتواصلك مع عيادات جوثن.
   برجاء إرسال:
@@ -77,7 +78,7 @@ DO NOT say "Here are our packages/offers" without appending [IMAGE: women_packag
   ▪️ رقم الموبايل
   ▪️ اليوم والوقت المناسب
   وذلك لتأكيد الحجز وإبلاغكم بأقرب موعد متاح.
-  - if a patient inquires about anything other laser hair removal (which is what we do in jothen clinics refer to tagamo branch with number 01028165555
+- If a patient inquires about ANY service other than laser hair removal (e.g., Plasma, Botox, etc.), politely inform them that this number is for laser services and direct them to the Tagamo branch at 01028165555. DO NOT append any image tags for non-laser inquiries.
 - If details arrive across multiple messages, retain the collected details and ask ONLY for what is missing.
 - Once all details are gathered across the conversation, confirm reception will call shortly and append:
   [NOTIFY: Name/Phone, Branch, Date and Time]
@@ -104,6 +105,18 @@ async def handle_instagram_messages(request: Request, backgroundTasks: Backgroun
             for messaging_event in entry.get("messaging", []):
                 message_data = messaging_event.get("message")
                 if message_data and not message_data.get("is_echo"):
+                    mid = message_data.get("mid")
+                    
+                    # Prevent processing the same message twice if Meta retries the webhook
+                    if mid:
+                        if mid in processed_mids:
+                            continue
+                        processed_mids.add(mid)
+                        
+                        # Keep the memory footprint light by trimming old IDs
+                        if len(processed_mids) > 1000:
+                            processed_mids.pop()
+
                     sender_id = messaging_event.get("sender", {}).get("id")
                     message_text = message_data.get("text")
                     if sender_id and message_text:
@@ -117,9 +130,9 @@ async def process_and_reply(sender_id: str, message_text: str):
     notify_match = re.search(r'\[NOTIFY:(.*?)\]', reply_text)
     patient_details = notify_match.group(1).strip() if notify_match else None
 
-    # Keyword safety net
+    # Keyword safety net - ONLY trigger if the AI isn't redirecting them for non-laser services
     lower_user = message_text.lower().strip()
-    if not image_tags:
+    if not image_tags and "01028165555" not in reply_text:
         if any(w in lower_user for w in ["package", "packages", "offer", "offers", "باقات", "عروض", "اسعار", "أسعار"]):
             image_tags.append("women_packages")
         elif any(w in lower_user for w in ["branch", "branches", "مكانكم", "فروع", "عنوان"]):
