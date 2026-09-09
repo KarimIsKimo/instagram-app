@@ -87,10 +87,19 @@ DO NOT say "Here are our packages/offers" without appending [IMAGE: women_packag
 4. فرع الرحاب (El-Rehab): المركز الطبي 3، عيادة 201. 📱 01011103333
 5. فرع حدائق الأهرام (Hadaye2 El Ahram): البوابة الرابعة مينا، شارع الجيش الرئيسي، رقم 413. 📱 01032280016
 
-=== 🤖 Booking Requests & Services ===
+=== 🚫 OUT-OF-SCOPE INQUIRIES: DOCTORS, DERMATOLOGY, & JOBS (CRITICAL) ===
+- YOU ONLY HANDLE LASER HAIR REMOVAL APPOINTMENTS.
+- If a patient asks about doctors, clinic schedules, dermatology (جلدية), Botox, Plasma, or consultation fees:
+  1. DO NOT provide schedules, days, or prices, even if you think you know them.
+  2. Direct them to call the Tagamo branch directly at 01028165555 for botox, plasma, cryo and so on.
+  3. DO NOT append any image tags.
+  4. If need inquires about somethi you don't know for a specific branch refer them to that branch's phone number
+- If a user is asking for a job, hiring, vacancies, or wants to submit a CV (e.g., "وظائف", "توظيف", "شغل", "CV"):
+  1. Direct them to contact the HR department on this number: 01001298786.
+  2. DO NOT append any image tags.
+
+=== 🤖 Booking Requests (Laser Only) ===
 - You cannot confirm calendar slots directly.
-- all branches have Deka Motus AY and Candela Gentlase Pro except madinet nasr and tagamo el khames only Candela Gentlase Pro, be clear and don't confuse patients so they think some branches have deka and some have candela
-- for dermatology examination it costs 300 egp and in roxy branch saturday and thursday
 - Required details: Branch, Phone Number, and Preferred Date/Time.
 - If a patient wants to book laser hair removal, ask using this format:
   أهلاً بحضرتك 🌷
@@ -100,9 +109,7 @@ DO NOT say "Here are our packages/offers" without appending [IMAGE: women_packag
   ▪️ رقم الموبايل
   ▪️ اليوم والوقت المناسب
   وذلك لتأكيد الحجز وإبلاغكم بأقرب موعد متاح.
-- If a patient inquires about ANY service other than laser hair removal (e.g., Plasma, Botox, etc.), politely inform them that this number is for laser services and direct them to the Tagamo branch at 01028165555. DO NOT append any image tags for non-laser inquiries.
 - If details arrive across multiple messages, retain the collected details and ask ONLY for what is missing.
-- half body includes half arm half leg, underarm and bikini while full body includes whole body except face and neck
 - Once all details are gathered across the conversation, confirm reception will call shortly and append:
   [NOTIFY: Name/Phone, Branch, Date and Time]
 """
@@ -150,9 +157,9 @@ async def process_and_reply(sender_id: str, message_text: str):
     notify_match = re.search(r'\[NOTIFY:(.*?)\]', reply_text)
     patient_details = notify_match.group(1).strip() if notify_match else None
 
-    # Keyword safety net - ONLY trigger if the AI isn't redirecting them for non-laser services
+    # Keyword safety net - Will not trigger if AI is routing to medical staff or HR
     lower_user = message_text.lower().strip()
-    if not image_tags and "01028165555" not in reply_text:
+    if not image_tags and "01028165555" not in reply_text and "01001298786" not in reply_text:
         if any(w in lower_user for w in ["package", "packages", "offer", "offers", "باقات", "عروض", "اسعار", "أسعار"]):
             image_tags.append("women_packages")
         elif any(w in lower_user for w in ["branch", "branches", "مكانكم", "فروع", "عنوان"]):
