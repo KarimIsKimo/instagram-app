@@ -23,7 +23,7 @@ STAFF_PHONE_NUMBER = os.getenv("STAFF_PHONE_NUMBER", "")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 user_chats = {}
-processed_mids = set() 
+processed_mids = set()
 
 SYSTEM_INSTRUCTION = """
 You are a friendly and professional receptionist at "عيادات جوثن" (Jothen Clinics) on Instagram.
@@ -58,6 +58,7 @@ You MUST append the corresponding image tag at the end of your message whenever 
 2. Inquiries about packages, offers, or general laser pricing: -> [IMAGE: women_packages]
 3. Inquiries about specific body areas or the 4-session promo: -> [IMAGE: women_areas]
 4. Inquiries specifically about men's offers/pricing: -> [IMAGE: men_offers]
+5. Inquiries about machines, devices, cooling, or laser technology: -> [IMAGE: machines]
 
 === 🧠 Conversational Flow & Memory ===
 - NEVER repeat greetings or re-introduce yourself.
@@ -117,7 +118,6 @@ async def handle_instagram_messages(request: Request, backgroundTasks: Backgroun
                 message_data = messaging_event.get("message")
                 if message_data and not message_data.get("is_echo"):
                     mid = message_data.get("mid")
-                    
                     if mid:
                         if mid in processed_mids:
                             continue
@@ -132,48 +132,44 @@ async def handle_instagram_messages(request: Request, backgroundTasks: Backgroun
     return {"status": "success"}
 
 async def process_and_reply(sender_id: str, message_text: str):
-    
-    # Context Injection (The Recency Hack) to lock in AI constraints
     enriched_text = f"""{message_text}
 
 [STRICT AUTOMATED REMINDER]:
-1. DO NOT dump full price lists. Quote only the specific requested price.
-2. NEVER invent doctors or schedules. For non-laser medical inquiries (Botox, Plasma, etc.), refer to Tagamo branch at 01028165555.
-3. For HR/CV inquiries, refer to 01001298786.
-4. ALWAYS include the required [IMAGE: ...] tag when mentioning prices, packages, or branches."""
+1. Match the user's language EXACTLY (reply in English if they use English).
+2. DO NOT dump full price lists. Quote only the specific requested price.
+3. NEVER invent doctors or schedules. For non-laser medical inquiries (Botox, Plasma, etc.), refer to Tagamo branch at 01028165555.
+4. For HR/CV inquiries, refer to 01001298786.
+5. ALWAYS include the required [IMAGE: ...] tag when mentioning prices, packages, branches, or machines/devices."""
 
     reply_text = get_ai_reply(sender_id, enriched_text)
 
-    # Clean the tags by stripping spaces BEFORE deduplicating to fix the double-image bug
     raw_image_tags = re.findall(r'\[IMAGE:(.*?)\]', reply_text)
-    image_tags = [tag.strip() for tag in raw_image_tags] 
-    
+    image_tags = [tag.strip() for tag in raw_image_tags]
+
     notify_match = re.search(r'\[NOTIFY:(.*?)\]', reply_text)
     patient_details = notify_match.group(1).strip() if notify_match else None
 
-    # Keyword safety net - Will not trigger if AI is routing to medical staff or HR
     lower_user = message_text.lower().strip()
     if not image_tags and "01028165555" not in reply_text and "01001298786" not in reply_text:
-        if any(w in lower_user for w in ["package", "packages", "offer", "offers", "باقات", "عروض", "اسعار", "أسعار"]):
-            image_tags.append("women_packages")
+        if any(w in lower_user for w in ["machine", "machines", "device", "devices", "جهاز", "اجهزة", "أجهزة", "نوع الجهاز"]):
+            image_tags.append("machines")
+        elif any(w in lower_user for w in ["area", "areas", "مناطق", "bikini", "underarm", "بكيني", "اندر ارم"]):
+            image_tags.append("women_areas")
         elif any(w in lower_user for w in ["branch", "branches", "مكانكم", "فروع", "عنوان"]):
             image_tags.append("branches")
-        elif any(w in lower_user for w in ["area", "areas", "مناطق"]):
-            image_tags.append("women_areas")
+        elif any(w in lower_user for w in ["package", "packages", "offer", "offers", "باقات", "عروض", "اسعار", "أسعار"]):
+            image_tags.append("women_packages")
 
     clean_text = re.sub(r'\[IMAGE:.*?\]', '', reply_text)
     clean_text = re.sub(r'\[NOTIFY:.*?\]', '', clean_text).strip()
 
-    # Send the text response
     if clean_text:
         await send_text_reply(sender_id, clean_text)
 
-    # Safely deduplicate images
     unique_tags = list(dict.fromkeys(image_tags))
     for img in unique_tags:
         await send_image_direct_upload(sender_id, img)
 
-    # Send WhatsApp alert if booking is complete
     if patient_details:
         print(f"🚨 NEW BOOKING REQUEST: {patient_details}")
         await send_whatsapp_alert(patient_details)
@@ -216,29 +212,21 @@ async def send_text_reply(recipient_id: str, text: str):
 async def send_image_direct_upload(recipient_id: str, image_name: str):
     url = "https://graph.instagram.com/v21.0/me/messages"
     params = {"access_token": PAGE_ACCESS_TOKEN.strip()}
-    
     file_path = f"images/{image_name}.jpg"
-    
+
     if not os.path.exists(file_path):
         print(f"❌ File not found on disk: {file_path}")
         return
 
     async with httpx.AsyncClient(timeout=30.0) as http_client:
         with open(file_path, "rb") as f:
-            files = {
-                "filedata": (f"{image_name}.jpg", f, "image/jpeg")
-            }
+            files = {"filedata": (f"{image_name}.jpg", f, "image/jpeg")}
             data = {
                 "recipient": json.dumps({"id": recipient_id}),
-                "message": json.dumps({
-                    "attachment": {
-                        "type": "image",
-                        "payload": {}
-                    }
-                })
+                "message": json.dumps({"attachment": {"type": "image", "payload": {}}}),
             }
             response = await http_client.post(url, params=params, data=data, files=files)
-            
+
         if response.status_code != 200:
             print(f"❌ Instagram Upload Error [{response.status_code}]: {response.text}")
         else:
@@ -259,10 +247,10 @@ async def send_whatsapp_alert(patient_details: str):
             "components": [
                 {
                     "type": "body",
-                    "parameters": [{"type": "text", "text": patient_details}]
+                    "parameters": [{"type": "text", "text": patient_details}],
                 }
-            ]
-        }
+            ],
+        },
     }
     async with httpx.AsyncClient() as http_client:
         response = await http_client.post(url, headers=headers, json=payload)
