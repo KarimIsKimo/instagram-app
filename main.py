@@ -24,6 +24,7 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 
 user_chats = {}
 processed_mids = set()
+user_profiles = {}  # Cache to store user names so we only fetch them once
 
 SYSTEM_INSTRUCTION = """
 You are a friendly and professional receptionist at "عيادات جوثن" (Jothen Clinics) on Instagram.
@@ -63,9 +64,10 @@ You MUST append the corresponding image tag at the end of your message whenever 
 === 🧠 Conversational Flow & Memory ===
 - NEVER repeat greetings or re-introduce yourself.
 - If the user says "let me check" or "I will confirm with you", respond warmly: "تمام تحت أمرك، وقت ما تحب تنورنا."
-=== 🌐 Language Rule ===
+
+=== 🌐 Language & Tone Rule ===
 - ALWAYS reply in the exact SAME language the user just used.
-- If Arabic: Natural Egyptian Arabic (لهجة مصرية عامية بسيطة), completely gender-neutral (using "حضرتك" and "إبلاغكم").
+- If Arabic: Natural Egyptian Arabic (لهجة مصرية عامية بسيطة). If you know the user's name, adapt your grammar to their gender (male/female) naturally. If the name is unclear, stay neutral (using "حضرتك").
 - If English: Clear, warm, professional English.
 
 === 📅 Working Days & Branches ===
@@ -131,15 +133,42 @@ async def handle_instagram_messages(request: Request, backgroundTasks: Backgroun
                         backgroundTasks.add_task(process_and_reply, sender_id, message_text)
     return {"status": "success"}
 
+async def get_ig_user_name(sender_id: str) -> str:
+    """Fetches the user's public Instagram name and caches it."""
+    if sender_id in user_profiles:
+        return user_profiles[sender_id]
+        
+    url = f"https://graph.instagram.com/{sender_id}"
+    params = {"fields": "name", "access_token": PAGE_ACCESS_TOKEN.strip()}
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http_client:
+            response = await http_client.get(url, params=params)
+            if response.status_code == 200:
+                name = response.json().get("name", "")
+                if name:
+                    user_profiles[sender_id] = name
+                    return name
+    except Exception as e:
+        print(f"⚠️ Could not fetch name for {sender_id}: {e}")
+        
+    return ""
+
 async def process_and_reply(sender_id: str, message_text: str):
-    enriched_text = f"""{message_text}
+    
+    # Fetch the user's name and append it to the message context
+    user_name = await get_ig_user_name(sender_id)
+    name_context = f"[Context: User's name is {user_name}]\n" if user_name else ""
+
+    enriched_text = f"""{name_context}{message_text}
 
 [STRICT AUTOMATED REMINDER]:
 1. Match the user's language EXACTLY (reply in English if they use English).
-2. DO NOT dump full price lists. Quote only the specific requested price.
-3. NEVER invent doctors or schedules. For non-laser medical inquiries (Botox, Plasma, etc.), refer to Tagamo branch at 01028165555.
-4. For HR/CV inquiries, refer to 01001298786.
-5. ALWAYS include the required [IMAGE: ...] tag when mentioning prices, packages, branches, or machines/devices."""
+2. Use the user's name to infer gender and adjust Arabic grammar naturally.
+3. DO NOT dump full price lists. Quote only the specific requested price.
+4. NEVER invent doctors or schedules. For non-laser medical inquiries, refer to 01028165555.
+5. For HR/CV inquiries, refer to 01001298786.
+6. ALWAYS include the required [IMAGE: ...] tag when mentioning prices, packages, branches, or machines/devices."""
 
     reply_text = get_ai_reply(sender_id, enriched_text)
 
