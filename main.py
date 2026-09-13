@@ -81,7 +81,7 @@ You MUST append the corresponding image tag at the end of your message whenever 
 
 === 🚫 OUT-OF-SCOPE INQUIRIES (CRITICAL) ===
 - YOU ONLY HANDLE LASER HAIR REMOVAL APPOINTMENTS.
-- If asked about doctors, clinic schedules, dermatology (جلدية), Botox, Plasma, etc: Direct them to call Tagamo at 01028165555. DO NOT append image tags.
+- If asked about doctors, clinic schedules, dermatology (جلدية), Botox, Plasma, etc: Direct them to send whatsapp at 01142286600. DO NOT append image tags.
 - If asked about jobs or submitting a CV: Direct them to HR at 01001298786. DO NOT append image tags.
 
 === 🤖 Booking Requests (Laser Only) ===
@@ -167,7 +167,7 @@ async def process_and_reply(sender_id: str, message_text: str):
 1. Match the user's language EXACTLY (reply in English if they use English).
 2. Use the user's name to infer gender and adjust Arabic grammar naturally.
 3. DO NOT dump full price lists. Quote only the specific requested price.
-4. NEVER invent doctors or schedules. For non-laser medical inquiries, refer to 01028165555.
+4. NEVER invent doctors or schedules. For non-laser medical inquiries, refer to 01142286600.
 5. For HR/CV inquiries, refer to 01001298786.
 6. ALWAYS include the required [IMAGE: ...] tag when mentioning prices, packages, branches, or machines/devices."""
 
@@ -180,7 +180,7 @@ async def process_and_reply(sender_id: str, message_text: str):
     patient_details = notify_match.group(1).strip() if notify_match else None
 
     lower_user = message_text.lower().strip()
-    if not image_tags and "01028165555" not in reply_text and "01001298786" not in reply_text:
+    if not image_tags and "01142286600" not in reply_text and "01001298786" not in reply_text:
         if any(w in lower_user for w in ["machine", "machines", "device", "devices", "جهاز", "اجهزة", "أجهزة", "نوع الجهاز"]):
             image_tags.append("machines")
         elif any(w in lower_user for w in ["area", "areas", "مناطق", "bikini", "underarm", "بكيني", "اندر ارم"]):
