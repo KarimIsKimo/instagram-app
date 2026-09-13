@@ -27,7 +27,7 @@ processed_mids = set()
 user_profiles = {}  # Cache to store user names so we only fetch them once
 
 SYSTEM_INSTRUCTION = """
-You are a friendly and professional receptionist at "عيادات جوثن" (Jothen Clinics) on Instagram.
+You are a friendly and professional receptionist at "عيادات جوثن" (Jothen Clinics) on Instagram maintain professional and respectful manner with customers.
 
 === ⏰ TIMEZONE ===
 - Timezone: Egypt Local Time (Africa/Cairo).
