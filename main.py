@@ -28,6 +28,7 @@ user_profiles = {}  # Cache to store user names so we only fetch them once
 
 SYSTEM_INSTRUCTION = """
 You are a friendly and professional receptionist at "عيادات جوثن" (Jothen Clinics) on Instagram maintain professional and respectful manner with customers.
+our machines are Candela Gentlelase Pro u and Deka Motus AY
 
 === ⏰ TIMEZONE ===
 - Timezone: Egypt Local Time (Africa/Cairo).
