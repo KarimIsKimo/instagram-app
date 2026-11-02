@@ -3,6 +3,8 @@ import re
 import json
 import httpx
 import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
 from fastapi.staticfiles import StaticFiles
 from google import genai
@@ -19,6 +21,19 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 WA_PHONE_NUMBER_ID = os.getenv("WA_PHONE_NUMBER_ID", "")
 WA_ACCESS_TOKEN = os.getenv("WA_ACCESS_TOKEN", "")
 STAFF_PHONE_NUMBER = os.getenv("STAFF_PHONE_NUMBER", "")
+
+BLACK_FRIDAY_ENABLED = os.getenv("BLACK_FRIDAY_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+BLACK_FRIDAY_START_DATE = os.getenv("BLACK_FRIDAY_START_DATE", "").strip()
+BLACK_FRIDAY_END_DATE = os.getenv("BLACK_FRIDAY_END_DATE", "").strip()
+
+BLACK_FRIDAY_OFFERS = """
+Women's Black Friday offers only:
+- Pulse packages: 1,000 pulses: 750 EGP; 2,500 pulses: 1,500 EGP; 5,000 pulses: 2,500 EGP; 6,000 pulses valid for 6 months: 3,000 EGP; additional pulse: 0.75 EGP.
+- Half body: 1 session: 1,250 EGP; 4 sessions: 4,500 EGP.
+- Full body (no abdomen or back): 1 session: 2,000 EGP; 4 sessions: 7,000 EGP.
+- Full body with abdomen and back: 1 session: 2,500 EGP; 4 sessions: 8,500 EGP.
+- Full body with face and neck: 1 session: 3,000 EGP; 4 sessions: 10,000 EGP.
+""".strip()
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -38,6 +53,13 @@ Use this exact data to answer specific price inquiries accurately.
 CRITICAL RULE: NEVER dump this entire list to a user. Just quote the specific price they asked for, keep the response short, and let the appended image do the rest.
 Men DO NOT buy pulses, they only buy sessions or by area, so if patient is a man don't provide packages or female offers
 Silicone skin protector is 100 egp while distance guage (مبعد) is 600 egp
+
+=== 🖤 BLACK FRIDAY CAMPAIGN RULES ===
+- The live Black Friday status is supplied with every customer message. Follow that status exactly.
+- Only use Black Friday prices when the live status says the campaign is active. Otherwise, use the normal pricing menu only.
+- Black Friday offers are for women only. Do not offer Black Friday pulse packages or women's Black Friday offers to men.
+- When an active Black Friday offer is relevant, clearly describe it as a limited-time Black Friday offer, state its campaign end date, and encourage booking before the campaign ends.
+- Never invent or imply a quantity, limited stock, remaining places, limited slots, or that an offer may run out. Do not call a Black Friday price permanent or regular.
 
 [Women's Laser Packages - Append [IMAGE: women_packages]]:
 - 1,000 Pulses: 800 LE | 2,000 Pulses: 1500 LE | 3,000 Pulses: 2000 LE
@@ -101,6 +123,52 @@ You MUST append the corresponding image tag at the end of your message whenever 
 - Retain collected details and ask ONLY for what is missing.
 - Once all 3 details are gathered, append: [NOTIFY: Name/Phone, Branch, Date and Time]
 """
+
+
+def get_black_friday_campaign_context() -> str:
+    """Return the Black Friday rules that apply at this moment in Egypt."""
+    if not BLACK_FRIDAY_ENABLED:
+        return (
+            "[LIVE BLACK FRIDAY STATUS: INACTIVE]\n"
+            "Black Friday is not enabled. Do not mention Black Friday or use Black Friday prices. "
+            "Use the normal pricing menu only."
+        )
+
+    try:
+        start_date = datetime.strptime(BLACK_FRIDAY_START_DATE, "%Y-%m-%d").date()
+        end_date = datetime.strptime(BLACK_FRIDAY_END_DATE, "%Y-%m-%d").date()
+    except ValueError:
+        return (
+            "[LIVE BLACK FRIDAY STATUS: INACTIVE]\n"
+            "Black Friday dates are missing or invalid. Do not mention Black Friday or use Black Friday prices. "
+            "Use the normal pricing menu only."
+        )
+
+    if start_date > end_date:
+        return (
+            "[LIVE BLACK FRIDAY STATUS: INACTIVE]\n"
+            "Black Friday dates are invalid. Do not mention Black Friday or use Black Friday prices. "
+            "Use the normal pricing menu only."
+        )
+
+    today = datetime.now(ZoneInfo("Africa/Cairo")).date()
+    if not start_date <= today <= end_date:
+        return (
+            "[LIVE BLACK FRIDAY STATUS: INACTIVE]\n"
+            f"The Black Friday campaign ran from {start_date.isoformat()} through {end_date.isoformat()} "
+            "(Egypt time) and is not active today. Do not mention it or use Black Friday prices. "
+            "Use the normal pricing menu only."
+        )
+
+    return (
+        "[LIVE BLACK FRIDAY STATUS: ACTIVE]\n"
+        f"This is a limited-time Black Friday campaign, valid through {end_date.isoformat()} (Egypt time).\n"
+        f"{BLACK_FRIDAY_OFFERS}\n"
+        "For these offers only: describe the relevant offer as a limited-time Black Friday offer, "
+        "mention that it is valid through the date above, and invite the customer to book before "
+        "the campaign ends. Never state or imply limited stock, limited quantity, remaining slots, "
+        "or that the offer may run out. Do not change any normal prices, workflows, or gender restrictions."
+    )
 
 @app.get("/health")
 async def health_check():
@@ -166,13 +234,16 @@ async def process_and_reply(sender_id: str, message_text: str):
 
     enriched_text = f"""{name_context}{message_text}
 
+{get_black_friday_campaign_context()}
+
 [STRICT AUTOMATED REMINDER]:
 1. Match the user's language EXACTLY (reply in English if they use English).
 2. Use the user's name to infer gender and adjust Arabic grammar naturally.
 3. DO NOT dump full price lists. Quote only the specific requested price.
 4. NEVER invent doctors or schedules. For non-laser medical inquiries, refer to 01142286600.
 5. For HR/CV inquiries, refer to 01001298786.
-6. ALWAYS include the required [IMAGE: ...] tag when mentioning prices, packages, branches, or machines/devices."""
+6. ALWAYS include the required [IMAGE: ...] tag when mentioning prices, packages, branches, or machines/devices.
+7. For active Black Friday offers, use only the live campaign prices and expiry above. State the offer is limited-time, but never claim stock or appointment scarcity."""
 
     reply_text = get_ai_reply(sender_id, enriched_text)
 
