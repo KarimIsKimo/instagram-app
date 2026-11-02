@@ -3,8 +3,6 @@ import re
 import json
 import httpx
 import time
-from datetime import datetime
-from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request, Response, BackgroundTasks, HTTPException
 from fastapi.staticfiles import StaticFiles
 from google import genai
@@ -23,8 +21,6 @@ WA_ACCESS_TOKEN = os.getenv("WA_ACCESS_TOKEN", "")
 STAFF_PHONE_NUMBER = os.getenv("STAFF_PHONE_NUMBER", "")
 
 BLACK_FRIDAY_ENABLED = os.getenv("BLACK_FRIDAY_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
-BLACK_FRIDAY_START_DATE = os.getenv("BLACK_FRIDAY_START_DATE", "").strip()
-BLACK_FRIDAY_END_DATE = os.getenv("BLACK_FRIDAY_END_DATE", "").strip()
 
 BLACK_FRIDAY_OFFERS = """
 Women's Black Friday offers only:
@@ -58,7 +54,7 @@ Silicone skin protector is 100 egp while distance guage (مبعد) is 600 egp
 - The live Black Friday status is supplied with every customer message. Follow that status exactly.
 - Only use Black Friday prices when the live status says the campaign is active. Otherwise, use the normal pricing menu only.
 - Black Friday offers are for women only. Do not offer Black Friday pulse packages or women's Black Friday offers to men.
-- When an active Black Friday offer is relevant, clearly describe it as a limited-time Black Friday offer, state its campaign end date, and encourage booking before the campaign ends.
+- When an active Black Friday offer is relevant, clearly describe it as a limited-time Black Friday offer and encourage booking while the campaign is active.
 - Never invent or imply a quantity, limited stock, remaining places, limited slots, or that an offer may run out. Do not call a Black Friday price permanent or regular.
 
 [Women's Laser Packages - Append [IMAGE: women_packages]]:
@@ -126,7 +122,7 @@ You MUST append the corresponding image tag at the end of your message whenever 
 
 
 def get_black_friday_campaign_context() -> str:
-    """Return the Black Friday rules that apply at this moment in Egypt."""
+    """Return the manually controlled Black Friday rules."""
     if not BLACK_FRIDAY_ENABLED:
         return (
             "[LIVE BLACK FRIDAY STATUS: INACTIVE]\n"
@@ -134,40 +130,14 @@ def get_black_friday_campaign_context() -> str:
             "Use the normal pricing menu only."
         )
 
-    try:
-        start_date = datetime.strptime(BLACK_FRIDAY_START_DATE, "%Y-%m-%d").date()
-        end_date = datetime.strptime(BLACK_FRIDAY_END_DATE, "%Y-%m-%d").date()
-    except ValueError:
-        return (
-            "[LIVE BLACK FRIDAY STATUS: INACTIVE]\n"
-            "Black Friday dates are missing or invalid. Do not mention Black Friday or use Black Friday prices. "
-            "Use the normal pricing menu only."
-        )
-
-    if start_date > end_date:
-        return (
-            "[LIVE BLACK FRIDAY STATUS: INACTIVE]\n"
-            "Black Friday dates are invalid. Do not mention Black Friday or use Black Friday prices. "
-            "Use the normal pricing menu only."
-        )
-
-    today = datetime.now(ZoneInfo("Africa/Cairo")).date()
-    if not start_date <= today <= end_date:
-        return (
-            "[LIVE BLACK FRIDAY STATUS: INACTIVE]\n"
-            f"The Black Friday campaign ran from {start_date.isoformat()} through {end_date.isoformat()} "
-            "(Egypt time) and is not active today. Do not mention it or use Black Friday prices. "
-            "Use the normal pricing menu only."
-        )
-
     return (
         "[LIVE BLACK FRIDAY STATUS: ACTIVE]\n"
-        f"This is a limited-time Black Friday campaign, valid through {end_date.isoformat()} (Egypt time).\n"
+        "This is a limited-time Black Friday campaign that is currently active.\n"
         f"{BLACK_FRIDAY_OFFERS}\n"
-        "For these offers only: describe the relevant offer as a limited-time Black Friday offer, "
-        "mention that it is valid through the date above, and invite the customer to book before "
-        "the campaign ends. Never state or imply limited stock, limited quantity, remaining slots, "
-        "or that the offer may run out. Do not change any normal prices, workflows, or gender restrictions."
+        "For these offers only: describe the relevant offer as a limited-time Black Friday offer and "
+        "invite the customer to book while the campaign is active. Never state or imply limited stock, "
+        "limited quantity, remaining slots, or that the offer may run out. Do not change any normal prices, "
+        "workflows, or gender restrictions."
     )
 
 @app.get("/health")
@@ -243,7 +213,7 @@ async def process_and_reply(sender_id: str, message_text: str):
 4. NEVER invent doctors or schedules. For non-laser medical inquiries, refer to 01142286600.
 5. For HR/CV inquiries, refer to 01001298786.
 6. ALWAYS include the required [IMAGE: ...] tag when mentioning prices, packages, branches, or machines/devices.
-7. For active Black Friday offers, use only the live campaign prices and expiry above. State the offer is limited-time, but never claim stock or appointment scarcity."""
+7. For active Black Friday offers, use only the live campaign prices above. State the offer is limited-time, but never claim stock or appointment scarcity."""
 
     reply_text = get_ai_reply(sender_id, enriched_text)
 
