@@ -81,6 +81,9 @@ You MUST append the corresponding image tag at the end of your message whenever 
 3. Inquiries about specific body areas or the 4-session promo: -> [IMAGE: women_areas]
 4. Inquiries specifically about men's offers/pricing: -> [IMAGE: men_offers]
 5. Inquiries about machines, devices, cooling, or laser technology: -> [IMAGE: machines]
+6. When Black Friday is active and the customer asks about Black Friday pulse packages or an additional pulse: -> [IMAGE: black_friday_pulses]
+7. When Black Friday is active and the customer asks about one of these four Black Friday packages—Half Body, Full Body without Abdomen/Back, Full Body with Abdomen/Back, or Full Body with Face/Neck—or its 4-session package: -> [IMAGE: black_friday_body]
+- Use black_friday_body only for those four Black Friday packages. For any other area, use women_areas as normal.
 
 === 🧠 Conversational Flow & Memory ===
 - NEVER repeat greetings or re-introduce yourself.
@@ -213,7 +216,8 @@ async def process_and_reply(sender_id: str, message_text: str):
 4. NEVER invent doctors or schedules. For non-laser medical inquiries, refer to 01142286600.
 5. For HR/CV inquiries, refer to 01001298786.
 6. ALWAYS include the required [IMAGE: ...] tag when mentioning prices, packages, branches, or machines/devices.
-7. For active Black Friday offers, use only the live campaign prices above. State the offer is limited-time, but never claim stock or appointment scarcity."""
+7. For active Black Friday pulse offers, append black_friday_pulses. For only the four Black Friday body packages named in the image rules, append black_friday_body. For all other areas, keep using women_areas.
+8. For active Black Friday offers, use only the live campaign prices above. State the offer is limited-time, but never claim stock or appointment scarcity."""
 
     reply_text = get_ai_reply(sender_id, enriched_text)
 
@@ -225,7 +229,11 @@ async def process_and_reply(sender_id: str, message_text: str):
 
     lower_user = message_text.lower().strip()
     if not image_tags and "01142286600" not in reply_text and "01001298786" not in reply_text:
-        if any(w in lower_user for w in ["machine", "machines", "device", "devices", "جهاز", "اجهزة", "أجهزة", "نوع الجهاز"]):
+        if BLACK_FRIDAY_ENABLED and any(w in lower_user for w in ["pulse", "pulses", "نبضة", "نبضات", "نبض"]):
+            image_tags.append("black_friday_pulses")
+        elif BLACK_FRIDAY_ENABLED and any(w in lower_user for w in ["half body", "full body", "نصف الجسم", "نص الجسم", "جسم كامل", "الجسم كامل"]):
+            image_tags.append("black_friday_body")
+        elif any(w in lower_user for w in ["machine", "machines", "device", "devices", "جهاز", "اجهزة", "أجهزة", "نوع الجهاز"]):
             image_tags.append("machines")
         elif any(w in lower_user for w in ["area", "areas", "مناطق", "bikini", "underarm", "بكيني", "اندر ارم"]):
             image_tags.append("women_areas")
