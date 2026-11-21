@@ -13,6 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from google import genai
 
 app = FastAPI()
+APP_VERSION = "phone-alerts-clean-v3"
+print(f"Jothen bot version: {APP_VERSION}", flush=True)
 
 os.makedirs("images", exist_ok=True)
 app.mount("/images", StaticFiles(directory="images"), name="images")
@@ -374,21 +376,21 @@ async def notify_staff_once(
             sender_state.new_phone_alert_times.append(now)
         alert.last_attempt = now
         alert.last_attempt_succeeded = False
-        label = "تحديث بيانات طلب التواصل" if alert.initial_sent else "طلب تواصل جديد من إنستجرام"
-        details = [
-            label,
-            f"رقم الهاتف: {phone}",
-            f"Instagram ID: {_single_line(sender_id, 80)}",
-        ]
+        # The approved WhatsApp template already supplies the heading.
+        details = []
         name = user_profiles.get(sender_id)
         if name:
             details.append(f"الاسم: {_single_line(name, 100)}")
+        details.append(f"رقم الهاتف: {phone}")
         if patient_details:
-            details.append(f"البيانات المقدمة: {_single_line(patient_details)}")
-        else:
-            details.append("الفرع أو الموعد قد يكون غير مكتمل؛ برجاء التواصل مع العميل")
-            details.append(f"رسالة العميل: {_single_line(message_text, 300)}")
-        details.append("الموعد يؤكده موظف الاستقبال")
+            # NOTIFY contains Name/Phone, Branch, Date and Time, in that order.
+            # Name and phone above are authoritative; only add the other fields.
+            parts = re.split(r"\s*[,،]\s*", patient_details, maxsplit=2)
+            if len(parts) == 3:
+                if parts[1].strip():
+                    details.append(f"الفرع: {_single_line(parts[1], 120)}")
+                if parts[2].strip():
+                    details.append(f"الموعد المفضل: {_single_line(parts[2], 160)}")
         sent = await send_whatsapp_alert(" | ".join(details))
         alert.last_attempt_succeeded = sent
         if sent:
@@ -420,7 +422,7 @@ def get_black_friday_campaign_context() -> str:
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "version": APP_VERSION}
 
 @app.get("/webhook")
 async def verify_webhook(request: Request):
